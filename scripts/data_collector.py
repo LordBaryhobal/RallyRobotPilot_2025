@@ -1,4 +1,5 @@
 import os.path
+import zipfile
 
 from rallyrobopilot import *
 
@@ -7,7 +8,6 @@ from PyQt6 import QtCore, QtWidgets, QtGui
 from PyQt6 import uic
 
 import pickle
-import lzma
 
 class DataCollectionUI(QtWidgets.QMainWindow):
     def __init__(self, message_processing_callback = None):
@@ -120,7 +120,7 @@ class DataCollectionUI(QtWidgets.QMainWindow):
 
         self.saveRecordButton.setText("Saving ...")
 
-        record_name = "record_%d.npz"
+        record_name = "record_%d.zip"
         fid = 0
         while os.path.exists(record_name % fid):
             fid += 1
@@ -132,8 +132,8 @@ class DataCollectionUI(QtWidgets.QMainWindow):
                 self.data = data
 
             def run(self):
-                with lzma.open(self.path, "wb") as f:
-                    pickle.dump(self.data, f)
+                with zipfile.ZipFile(self.path, "w") as f:
+                    f.writestr("data.pkl", pickle.dumps(self.data))
 
         self.saving_worker = ThreadedSaver(record_name % fid, self.recorded_data)
         self.recorded_data = []
