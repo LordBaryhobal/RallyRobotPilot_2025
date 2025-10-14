@@ -2,7 +2,7 @@
 
 from PyQt6 import QtWidgets
 
-from data_collector import DataCollectionUI
+from .data_collector import DataCollectionUI
 """
 This file is provided as an example of what a simplistic controller could be done.
 It simply uses the DataCollectionUI interface zo receive sensing_messages and send controls.
