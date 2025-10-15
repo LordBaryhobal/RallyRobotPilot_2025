@@ -120,7 +120,7 @@ class DataCollectionUI(QtWidgets.QMainWindow):
 
         self.saveRecordButton.setText("Saving ...")
 
-        record_name = "record_%d.zip"
+        record_name = "data/record_%d.zip"
         fid = 0
         while os.path.exists(record_name % fid):
             fid += 1

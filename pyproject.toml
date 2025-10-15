@@ -10,9 +10,11 @@ dependencies = [
     "numpy>=2.1.0",
     "psd-tools3==1.8.2",
     "pyqt6==6.7.1",
+    "scikit-learn>=1.7.2",
     "screeninfo==0.8.1",
     "setuptools>=80.9.0",
     "torch>=2.8.0",
+    "tqdm>=4.67.1",
     "ursina==5.0.0",
     "ursinanetworking==2.1.4",
 ]
