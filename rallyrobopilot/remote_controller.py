@@ -80,13 +80,13 @@ class RemoteController(Entity):
             snapshot.raycast_distances = self.car.multiray_sensor.collect_sensor_values()
 
             #   Collect last rendered image
-            tex = base.win.getDisplayRegion(0).getScreenshot()
-            arr = tex.getRamImageAs("RGB")
-            data = np.frombuffer(arr, np.uint8)
-            image = data.reshape(tex.getYSize(), tex.getXSize(), 3)
-            image = image[::-1, :, :]#   Image arrives with inverted Y axis
+            #tex = base.win.getDisplayRegion(0).getScreenshot()
+            #arr = tex.getRamImageAs("RGB")
+            #data = np.frombuffer(arr, np.uint8)
+            #image = data.reshape(tex.getYSize(), tex.getXSize(), 3)
+            #image = image[::-1, :, :]#   Image arrives with inverted Y axis
 
-            snapshot.image = image
+            #snapshot.image = image
 
             msg_mngr = SensingSnapshotManager()
             data = msg_mngr.pack(snapshot)
@@ -193,8 +193,10 @@ class RemoteController(Entity):
                         break
                     self.client_commands.add(recv_data)
 
+            except socket.timeout:
+                pass
             except Exception as e:
-                printv(e)
+                print(f"Error while receiving network data: {e}")
 
         #   No controller connected
         else:
@@ -210,8 +212,10 @@ class RemoteController(Entity):
                 #   Close listen socket
                 self.listen_socket.close()
                 self.listen_socket = None
+            except socket.timeout:
+                pass
             except Exception as e:
-                printv(e)
+                print(f"Error while waiting for client: {e}")
 
 
     def open_connection_socket(self):

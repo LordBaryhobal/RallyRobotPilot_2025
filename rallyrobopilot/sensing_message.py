@@ -113,8 +113,10 @@ class NetworkDataCmdInterface:
 
                 self.msg_mngr.add_message_chunk(data)
 
-        except Exception as e:
+        except socket.timeout:
             pass
+        except Exception as e:
+            print(f"Error while receiving message: {e}")
 
     def process_sensing_message(self, sensing_snapshot):
         #   Sample function to use as a callback
