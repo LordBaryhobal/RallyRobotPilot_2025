@@ -2,12 +2,12 @@ from rallyrobopilot import Car, Track, SunLight, MultiRaySensor
 from ursina import *
 
 
-def prepare_game_app():
+def prepare_game_app(track_name = "SimpleTrack"):
     from ursina import window, Ursina
     
     # Create Window
     window.vsync = True # Set to false to uncap FPS limit of 60
-    app = Ursina(size=(1280,1024))
+    app = Ursina(size=(600, 400))
     print("Asset folder")
     print(application.asset_folder)
 
@@ -29,8 +29,7 @@ def prepare_game_app():
     #                Car texture             Particle Textures
     global_texs = [ "assets/cars/garage/sports-car/sports-red.png", "sports-blue.png", "sports-green.png", "sports-orange.png", "sports-white.png", "particle_forest_track.png", "red.png"]
     
-    # load assets
-    track_name = "SimpleTrack"
+    # load asset
     track = Track(track_name)
     print("loading assets after track creation")
     track.load_assets(global_models, global_texs)
@@ -44,6 +43,7 @@ def prepare_game_app():
     
     car.multiray_sensor = MultiRaySensor(car, 15, 90)
     car.multiray_sensor.enable()
+    car.multiray_sensor.set_enabled_rays(False)
     
     # Lighting + shadows
     sun = SunLight(direction = (-0.7, -0.9, 0.5), resolution = 3072, car = car)

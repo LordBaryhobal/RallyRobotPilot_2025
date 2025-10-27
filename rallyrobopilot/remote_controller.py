@@ -141,6 +141,8 @@ class RemoteController(Entity):
         while len(self.client_commands) > 0:
             try:
                 commands = self.client_commands.parse_next_command()
+                if commands is None:
+                    continue
                 print("Processing command", commands)
                 if commands[0] == b'push' or commands[0] == b'release':
                     if commands[1] == b'forward':
@@ -193,13 +195,17 @@ class RemoteController(Entity):
                         break
                     self.client_commands.add(recv_data)
 
+            except socket.timeout:
+                pass
             except Exception as e:
-                printv(e)
+                print(f"Error while receiving network data: {e}")
 
         #   No controller connected
         else:
             if self.listen_socket is None:
                 self.open_connection_socket()
+            if self.listen_socket is None:
+                raise RuntimeError("Could open socket")
             try:
                 inc_client, address = self.listen_socket.accept()
                 print("Controller connecting from " + str(address))
@@ -210,8 +216,10 @@ class RemoteController(Entity):
                 #   Close listen socket
                 self.listen_socket.close()
                 self.listen_socket = None
+            except socket.timeout:
+                pass
             except Exception as e:
-                printv(e)
+                print(f"Error while waiting for client: {e}")
 
 
     def open_connection_socket(self):
