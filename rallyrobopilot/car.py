@@ -12,7 +12,6 @@ class Car(Entity):
     def __init__(self, position = (0, 0, 4), rotation = (0, 0, 0), topspeed = 30, acceleration = 0.35, braking_strength = 30, friction = 1.5, camera_speed = 8):
         super().__init__(
             model = "assets/cars/sports-car.obj",
-            texture = "assets/cars/garage/sports-car/sports-red.png",
             collider = "sphere",
             position = position,
             rotation = rotation,
@@ -128,9 +127,16 @@ class Car(Entity):
 
         self.model_path = str(self.model).replace("render/scene/car/", "")
 
-        invoke(self.update_model_path, delay = 1)
-
         self.multiray_sensor = None
+
+        self.keys = {
+            "w": False,
+            "a": False,
+            "s": False,
+            "d": False,
+        }
+
+        self.ignore_collisions = []
 
     def set_track(self, track):
         self.track = track
@@ -141,8 +147,6 @@ class Car(Entity):
 
     def sports_car(self):
         self.car_type = "sports"
-        self.model = "assets/cars/sports-car.obj"
-        self.texture = "assets/cars/garage/sports-car/sports-red.png"
         self.topspeed = 50
         self.minspeed = -15
         self.acceleration = 25
@@ -210,7 +214,7 @@ class Car(Entity):
 
         # Can only turn if |speed| > 0.5
         if self.speed > 0.5 or self.speed < -0.5:
-            if held_keys[self.controls[1]] or held_keys["left arrow"]:
+            if self.keys[self.controls[1]] or held_keys[self.controls[1]] or held_keys["left arrow"]:
                 self.rotation_speed -= self.steering_amount * DELTA_TIME
 
                 # Turning decreases our speed.
@@ -219,7 +223,7 @@ class Car(Entity):
                 elif self.speed < 0:
                     self.speed += self.turning_speed / 5 * DELTA_TIME
 
-            elif held_keys[self.controls[3]] or held_keys["right arrow"]:
+            elif self.keys[self.controls[3]] or held_keys[self.controls[3]] or held_keys["right arrow"]:
                 self.rotation_speed += self.steering_amount * DELTA_TIME
                 if self.speed > 1:
                     self.speed -= self.turning_speed * DELTA_TIME
@@ -256,29 +260,6 @@ class Car(Entity):
             self.camera_rotation = 30
 
 
-    def update_vertical_position(self, y_ray, movementY):
-        # Check if car is hitting the ground
-        if self.visible:
-            if y_ray.distance <= self.scale_y * 1.7 + abs(movementY):
-                self.velocity_y = 0
-                # Check if hitting a wall or steep slope
-                if y_ray.world_normal.y > 0.7 and y_ray.world_point.y - self.world_y < 0.5:
-                    # Set the y value to the ground's y value
-                    self.y = y_ray.world_point.y + 1.4
-                    self.hitting_wall = False
-                else:
-                    # Car is hitting a wall
-                    self.hitting_wall = True
-
-                if self.copy_normals:
-                    self.ground_normal = self.position + y_ray.world_normal
-                else:
-                    self.ground_normal = self.position + (0, 180, 0)
-            else:
-                self.y += movementY * 50 * DELTA_TIME
-                self.velocity_y -= 50 * DELTA_TIME
-
-
     def update(self):
         # Exit if esc pressed.
         if held_keys["escape"]:
@@ -287,7 +268,7 @@ class Car(Entity):
         self.check_respawn()
 
         #   Process inputs & update speed
-        if held_keys[self.controls[0]] or held_keys["up arrow"]:
+        if self.keys[self.controls[0]] or held_keys[self.controls[0]] or held_keys["up arrow"]:
             self.speed += self.acceleration * DELTA_TIME
             self.driving = True
 
@@ -300,7 +281,7 @@ class Car(Entity):
                 self.speed += self.friction * 5 * DELTA_TIME
 
         # Braking
-        if held_keys[self.controls[2] or held_keys["down arrow"]]:
+        if self.keys[self.controls[2]] or held_keys[self.controls[2]] or held_keys["down arrow"]:
             if self.speed > 0:
                 self.speed -= self.braking_strenth * DELTA_TIME
             else:
@@ -315,8 +296,8 @@ class Car(Entity):
         elif self.speed < self.minspeed:
             self.speed = self.minspeed
 
-        if held_keys[self.controls[1]] or held_keys["left arrow"] or held_keys[self.controls[3]] or held_keys["right arrow"]:
-            turn_right = held_keys[self.controls[3]] or held_keys["right arrow"]
+        if self.keys[self.controls[1]] or held_keys[self.controls[1]] or held_keys["left arrow"] or self.keys[self.controls[3]] or held_keys[self.controls[3]] or held_keys["right arrow"]:
+            turn_right = self.keys[self.controls[3]] or held_keys[self.controls[3]] or held_keys["right arrow"]
             rotation_sign = (1 if turn_right else -1)
 
             #   Max angular speed
@@ -351,7 +332,7 @@ class Car(Entity):
 
         #   Return residual distance to travel and residual speed.
         def move_car(distance_to_travel, direction):
-            front_collision = boxcast(origin = self.world_position, direction = self.forward * direction, thickness = (0.1, 0.1), distance = self.scale_x + distance_to_travel, ignore = [self, ])
+            front_collision = boxcast(origin = self.world_position, direction = self.forward * direction, thickness = (0.1, 0.1), distance = self.scale_x + distance_to_travel, ignore = [self, ] + self.ignore_collisions)
 
             #   Detect collision
             if front_collision.distance < self.scale_x + distance_to_travel:
@@ -369,12 +350,14 @@ class Car(Entity):
                 self.x += (front_collision.world_normal * OBSTACLE_DISPLACEMENT_MARGIN).x
                 self.z += (front_collision.world_normal * OBSTACLE_DISPLACEMENT_MARGIN).z
 
+                self.hitting_wall = True
                 return 0
 
             else:
                 self.x += self.forward[0] * distance_to_travel
                 self.z += self.forward[2] * distance_to_travel
 
+                self.hitting_wall = False
                 return 0
 
         for i in range(2):

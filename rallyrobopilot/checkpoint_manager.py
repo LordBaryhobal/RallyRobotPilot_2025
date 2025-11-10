@@ -13,10 +13,9 @@ from rallyrobopilot.checkpoint import Checkpoint
 class CheckpointManager(Entity):
     SAVE_PATH: Path = Path("checkpoints.json")
 
-    def __init__(self, car: Car):
+    def __init__(self):
         super().__init__()
         self.checkpoints: list[Checkpoint] = []
-        self.car: Car = car
         self.pending: Optional[Checkpoint] = None
         self.entities: list[Entity] = []
         self.load()
@@ -83,7 +82,7 @@ class CheckpointManager(Entity):
         if checkpoint.end is None:
             return
         pos2D: Vec2 = (checkpoint.end[0] + checkpoint.end[1]) / 2
-        pos: tuple[float, float, float] = (pos2D.x, self.car.position.y, pos2D.y)
+        pos: tuple[float, float, float] = (pos2D.x, 1, pos2D.y)
         delta: Vec2 = checkpoint.end[1] - checkpoint.end[0]
         rotation = delta.signed_angle_deg(Vec2(1, 0)) - 90
         entity: Entity = Entity(

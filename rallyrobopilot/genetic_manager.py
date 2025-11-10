@@ -5,25 +5,27 @@ from rallyrobopilot.car import Car
 from rallyrobopilot.checkpoint import Checkpoint
 from rallyrobopilot.genetic_player import FrameInput, GeneticPlayer
 
-from ursina import Ursina, held_keys, time
+from ursina import Ursina, held_keys, time, Vec3
+
+from rallyrobopilot.track import Track
 
 
 class GeneticManager:
     def __init__(
         self,
         app: Ursina,
-        car: Car,
+        track: Track,
         checkpoint: Checkpoint,
-        pop_size: int = 100,
+        pop_size: int = 20,
         dna_length: int = 100,
         generations: int = 30,
         rounds: int = 5,
         passthrough_rate: float = 0.1,
-        mutation_rate: float = 0.5,
-        mutation_prob: float = 0.1,
+        mutation_rate: float = 0.6,
+        mutation_prob: float = 0.3,
     ):
         self.app: Ursina = app
-        self.car: Car = car
+        self.track: Track = track
         self.checkpoint: Checkpoint = checkpoint
         self.pop_size: int = pop_size
         self.dna_length: int = dna_length
@@ -32,13 +34,25 @@ class GeneticManager:
         self.passthrough_rate: float = passthrough_rate
         self.mutation_rate: float = mutation_rate
         self.mutation_prob: float = mutation_prob
+        self.cars: list[Car] = [self.new_car() for _ in range(self.pop_size)]
+        for car in self.cars:
+            car.ignore_collisions = self.cars
+        self.cars[0].camera_follow = True
+        self.cars[0].change_camera = True
         self.population: list[GeneticPlayer] = self.generate_population()
+
+    def new_car(self) -> Car:
+        car = Car()
+        car.sports_car()
+        car.set_track(self.track)
+        car.visible = True
+        car.enable()
+        return car
 
     def execute(self):
         for gen in range(self.generations):
             print(f"Generation {gen + 1}/{self.generations}")
-            for player in self.population:
-                self.evaluate(player)
+            self.evaluate_all()
             tot_eval: float = sum(c.evaluation for c in self.population)
             print(f"Gen {gen} - average evaluation: {tot_eval / self.pop_size:.2f}")
 
@@ -47,8 +61,7 @@ class GeneticManager:
             self.mutate(children)
             self.population = children
 
-        for player in self.population:
-            self.evaluate(player)
+        self.evaluate_all()
 
         best: GeneticPlayer = sorted(self.population, key=lambda p: p.evaluation)[0]
 
@@ -102,33 +115,28 @@ class GeneticManager:
                 if random.random() < self.mutation_prob:
                     child.dna[i] = child.random_frame()
 
-    def evaluate(self, player: GeneticPlayer):
-        if player.evaluated:
-            return
+    def reset_cars(self):
+        for car in self.cars:
+            self.checkpoint.reset_car(car)
 
-        # Simulate player and evaluate
-        self.checkpoint.reset_car(self.car)
-        self.start_pos = self.car.position
-        step_till_gate: int = 0
-        prev_pos = self.car.position
-        reached_end: bool = False
-        fps = 0
+    def evaluate_all(self):
+        if self.checkpoint.end is None:
+            return
+        for player, car in zip(self.population, self.cars):
+            self.checkpoint.reset_car(car)
+            player.prev_pos = car.position
+        self.start_pos = self.cars[0].position
+        
         for _ in range(self.dna_length):
-            controls: FrameInput = player.infer()
-            held_keys["w"] = bool(controls[0])
-            held_keys["s"] = bool(controls[1])
-            held_keys["a"] = bool(controls[2])
-            held_keys["d"] = bool(controls[3])
-            for _ in range(3):
-                if self.checkpoint.intersects(prev_pos, self.car.position):
-                    reached_end = True
-                self.app.step()
-                fps += 1 / time.dt
-                if not reached_end:
-                    step_till_gate += 1
-                prev_pos = self.car.position
-        self.end_pos = self.car.position
-        dist: float = (self.end_pos - self.start_pos).length()
-        player.set_evaluation(dist * step_till_gate)
-        print(f"  Player {player.id}: {player.evaluation}")
-        print(f"  Average FPS: {fps / self.dna_length / 3}")
+            for player, car in zip(self.population, self.cars):
+                player.infer(car, self.checkpoint)
+            self.app.step()
+        
+        for player, car in zip(self.population, self.cars):
+            end_pos: Vec3 = car.position
+            start_dist: float = (end_pos - self.start_pos).length()
+            end_dist1: float = (self.checkpoint.end[0] - self.start_pos.xz).length()
+            end_dist2: float = (self.checkpoint.end[1] - self.start_pos.xz).length()
+            end_dist: float = (end_dist1 + end_dist2) / 2
+            player.set_evaluation(player.step_till_gate / start_dist * end_dist * (player.wall_hits + 1))
+            print(f"  Player {player.id}: {player.evaluation}")
