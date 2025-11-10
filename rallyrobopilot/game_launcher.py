@@ -1,6 +1,8 @@
 from rallyrobopilot import Car, Track, SunLight, MultiRaySensor
 from ursina import *
 
+from rallyrobopilot.checkpoint_manager import CheckpointManager
+
 
 def prepare_game_app(track_name = "SimpleTrack"):
     from ursina import window, Ursina
@@ -67,5 +69,9 @@ def prepare_game_app(track_name = "SimpleTrack"):
     
     track.activate()
     track.played = True
+
+    checkpoint_manager = CheckpointManager(car)
+    checkpoint_manager.enable()
+    checkpoint_manager.add_entities()
    
     return app, car
