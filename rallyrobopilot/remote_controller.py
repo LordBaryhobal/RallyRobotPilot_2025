@@ -199,6 +199,7 @@ class RemoteController(Entity):
                 pass
             except Exception as e:
                 print(f"Error while receiving network data: {e}")
+                raise e
 
         #   No controller connected
         else:

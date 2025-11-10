@@ -130,6 +130,7 @@ class NetworkDataCmdInterface:
             pass
         except Exception as e:
             print(f"Error while receiving message: {e}")
+            raise e
 
     def process_sensing_message(self, sensing_snapshot):
         #   Sample function to use as a callback
