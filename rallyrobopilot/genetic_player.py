@@ -1,6 +1,7 @@
 from __future__ import annotations
 import random
 
+from rallyrobopilot.trajectory_point import TrajectoryPoint
 from ursina import Vec3
 
 from rallyrobopilot.car import Car
@@ -11,7 +12,7 @@ FrameInput = tuple[int, int, int, int]
 class GeneticPlayer:
     def __init__(self, id: int, dna: list[FrameInput]):
         self.dna: list[FrameInput] = dna
-        self.i: int = 0
+        self.i: int = 1
         self.id: int = id
 
         self.evaluation: float = 0.0
@@ -21,6 +22,7 @@ class GeneticPlayer:
         self.reached_end: bool = False
         self.steps_till_gate: int = 0
         self.wall_hits: int = 0
+        self.trajectory: list[TrajectoryPoint] = []
     
     def set_evaluation(self, evaluation: float):
         self.evaluation = evaluation
@@ -32,6 +34,8 @@ class GeneticPlayer:
         car.keys["s"] = bool(controls[1])
         car.keys["a"] = bool(controls[2])
         car.keys["d"] = bool(controls[3])
+        self.trajectory.append(TrajectoryPoint.from_car(car))
+        
         if checkpoint.intersects(self.prev_pos.xz, car.position.xz):
             self.reached_end = True
             print(f"Player {self.id} reached the end")

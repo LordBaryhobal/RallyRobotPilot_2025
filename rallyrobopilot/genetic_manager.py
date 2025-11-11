@@ -2,14 +2,14 @@ import json
 import random
 
 from matplotlib import pyplot as plt
+from ursina import Ursina
+from ursina.vec2 import Vec2
 
 from rallyrobopilot.car import Car
-from rallyrobopilot.checkpoint import Checkpoint
+from rallyrobopilot.checkpoint_manager import CheckpointManager
 from rallyrobopilot.genetic_player import FrameInput, GeneticPlayer
-
-from ursina import Ursina, held_keys, time, Vec3
-
 from rallyrobopilot.track import Track
+from rallyrobopilot.trajectory_segment import TrajectorySegment
 
 
 class GeneticManager:
@@ -20,7 +20,7 @@ class GeneticManager:
         pop_size: int = 20,
         dna_length: int = 100,
         generations: int = 30,
-        rounds: int = 5,
+        rounds: int = 3,
         passthrough_rate: float = 0.2,
         mutation_rate: float = 0.6,
         mutation_prob: float = 0.2,
@@ -51,15 +51,20 @@ class GeneticManager:
         car.enable()
         return car
 
-    def execute(self):
-        evaluations: list[float] = []
+    def execute(self) -> GeneticPlayer:
+        mean_evals: list[float] = []
+        best_evals: list[float] = []
+        
         for gen in range(self.generations):
             print(f"Generation {gen + 1}/{self.generations}")
             self.evaluate_all()
-            tot_eval: float = sum(c.evaluation for c in self.population)
+            evals: list[float] = [c.evaluation for c in self.population]
+            tot_eval: float = sum(evals)
             mean_eval: float = tot_eval / self.pop_size
-            evaluations.append(mean_eval)
-            print(f"Gen {gen} - average evaluation: {mean_eval:.2f}")
+            min_eval: float = min(evals)
+            mean_evals.append(mean_eval)
+            best_evals.append(min_eval)
+            print(f"Gen {gen} - avg={mean_eval:.2f} min={min_eval:.2f}")
 
             parents: list[GeneticPlayer] = self.select()
             children: list[GeneticPlayer] = self.crossover(parents)
@@ -72,12 +77,16 @@ class GeneticManager:
 
         with open("best.json", "w") as f:
             json.dump(best.dna, f)
-        
-        plt.plot(range(self.generations), evaluations)
+
+        plt.plot(range(self.generations), mean_evals, label="Mean")
+        plt.plot(range(self.generations), best_evals, label="Best")
         plt.xlabel("Generation")
-        plt.ylabel("Mean evaluation")
-        plt.title("Mean evaluation evolution")
+        plt.ylabel("Evaluation")
+        plt.title("Evaluation evolution")
+        plt.legend()
         plt.savefig("evolution.png")
+        
+        return best
 
     def generate_population(self) -> list[GeneticPlayer]:
         return [GeneticPlayer.random(i, self.dna_length) for i in range(self.pop_size)]
@@ -138,7 +147,7 @@ class GeneticManager:
             player.prev_pos = car.position
         start_pos: Vec2 = self.cars[0].position.xz
         
-        for _ in range(self.dna_length):
+        for _ in range(1, self.dna_length):
             for player, car in zip(self.population, self.cars):
                 player.infer(car, self.segment.checkpoint)
             self.app.step()
@@ -147,5 +156,41 @@ class GeneticManager:
             end_pos: Vec2 = car.position.xz
             start_dist: float = (end_pos - start_pos).length()
             end_dist: float = self.segment.checkpoint.distance(end_pos)
-            player.set_evaluation(player.steps_till_gate / start_dist * end_dist * (player.wall_hits + 1))
-            print(f"  Player {player.id}: {player.evaluation}")
+            max_dist: float = self.segment.checkpoint.distance(start_pos)
+            
+            if player.reached_end:
+                end_dist = 0
+            else:
+                player.steps_till_gate += 1
+            
+            d: float = end_dist / max_dist
+            t: float = player.steps_till_gate / self.segment.length
+            
+            if player.wall_hits > 0:
+                fitness = 1000 + player.wall_hits * 100
+            elif player.reached_end:
+                fitness = t
+            else:
+                fitness = 500 * d
+            player.set_evaluation(fitness)
+            print(
+                f"  Player {player.id:3d}: {player.evaluation:9.3f} (wall_hits={player.wall_hits}, {start_dist=:6.2f}, {end_dist=:6.2f}, steps_till_gate={player.steps_till_gate:3d})"
+            )
+
+    def optimize(self, segment: TrajectorySegment) -> GeneticPlayer:
+        self.segment = segment
+        self.checkpoint_manager.add_entity(self.segment.checkpoint)
+        self.init_pop_from_segment(self.segment)
+        return self.execute()
+
+    def init_pop_from_segment(self, segment: TrajectorySegment):
+        self.population = []
+        self.dna_length = segment.length
+        dna: list[FrameInput] = []
+        for i in range(self.dna_length):
+            dna.append(segment.frame_at(i))
+
+        for i in range(self.pop_size):
+            self.population.append(GeneticPlayer(i, dna.copy()))
+
+        # self.mutate(self.population)
