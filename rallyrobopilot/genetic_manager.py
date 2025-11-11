@@ -1,6 +1,8 @@
 import json
 import random
 
+from matplotlib import pyplot as plt
+
 from rallyrobopilot.car import Car
 from rallyrobopilot.checkpoint import Checkpoint
 from rallyrobopilot.genetic_player import FrameInput, GeneticPlayer
@@ -20,9 +22,9 @@ class GeneticManager:
         dna_length: int = 100,
         generations: int = 30,
         rounds: int = 5,
-        passthrough_rate: float = 0.1,
+        passthrough_rate: float = 0.2,
         mutation_rate: float = 0.6,
-        mutation_prob: float = 0.3,
+        mutation_prob: float = 0.2,
     ):
         self.app: Ursina = app
         self.track: Track = track
@@ -50,11 +52,14 @@ class GeneticManager:
         return car
 
     def execute(self):
+        evaluations: list[float] = []
         for gen in range(self.generations):
             print(f"Generation {gen + 1}/{self.generations}")
             self.evaluate_all()
             tot_eval: float = sum(c.evaluation for c in self.population)
-            print(f"Gen {gen} - average evaluation: {tot_eval / self.pop_size:.2f}")
+            mean_eval: float = tot_eval / self.pop_size
+            evaluations.append(mean_eval)
+            print(f"Gen {gen} - average evaluation: {mean_eval:.2f}")
 
             parents: list[GeneticPlayer] = self.select()
             children: list[GeneticPlayer] = self.crossover(parents)
@@ -67,6 +72,12 @@ class GeneticManager:
 
         with open("best.json", "w") as f:
             json.dump(best.dna, f)
+        
+        plt.plot(range(self.generations), evaluations)
+        plt.xlabel("Generation")
+        plt.ylabel("Mean evaluation")
+        plt.title("Mean evaluation evolution")
+        plt.savefig("evolution.png")
 
     def generate_population(self) -> list[GeneticPlayer]:
         return [GeneticPlayer.random(i, self.dna_length) for i in range(self.pop_size)]
