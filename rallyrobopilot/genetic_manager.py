@@ -130,10 +130,13 @@ class GeneticManager:
         for child in children:
             if random.random() >= self.mutation_rate:
                 continue
+            
+            width: int = random.randint(1, 5)
+            i: int = random.randint(0, self.dna_length - width)
+            frame: FrameInput = child.random_frame()
 
-            for i in range(self.dna_length):
-                if random.random() < self.mutation_prob:
-                    child.dna[i] = child.random_frame()
+            for j in range(width):
+                child.dna[i + j] = frame
 
     def reset_cars(self):
         for car in self.cars:
@@ -150,7 +153,7 @@ class GeneticManager:
         for _ in range(1, self.dna_length):
             for player, car in zip(self.population, self.cars):
                 player.infer(car, self.segment.checkpoint)
-            self.app.step()
+            self.app.step() # type: ignore
 
         for player, car in zip(self.population, self.cars):
             end_pos: Vec2 = car.position.xz
