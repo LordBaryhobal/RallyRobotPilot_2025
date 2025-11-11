@@ -19,7 +19,9 @@ def main():
     app, _, track = prepare_game_app("SimpleTrack/track_metadata.json")
 
     cm: CheckpointManager = CheckpointManager()
-    gm: GeneticManager = GeneticManager(app, track, cm.checkpoints[0])
+    to: TrajectoryOptimizer = TrajectoryOptimizer("record_2.npz")
+    #random.seed(11)
+    gm: GeneticManager = GeneticManager(app, track)
     gm.execute()
     quit()
 

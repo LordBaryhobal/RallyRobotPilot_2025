@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import json
-import os
+from math import cos, radians, sin
 from typing import TYPE_CHECKING, Optional
 
 from ursina.vec2 import Vec2
 from ursina.vec3 import Vec3
+
+from rallyrobopilot.sensing_message import SensingSnapshot
 
 if TYPE_CHECKING:
     from rallyrobopilot.car import Car
@@ -46,13 +47,41 @@ class Checkpoint:
     def create(car: Car) -> Checkpoint:
         return Checkpoint(car.position, car.rotation, car.speed)
 
-    def set_end(self, car: Car):
-        center: Vec2 = car.position.xz
-        n: Vec2 = car.forward.xz
-        distances: list[float] = car.multiray_sensor.collect_sensor_values()
-        left_dist: float = distances[0]
-        right_dist: float = distances[-1]
+    @staticmethod
+    def from_snapshots(start: SensingSnapshot, end: SensingSnapshot) -> Checkpoint:
+        start_pos: Vec3 = Vec3(*start.car_position)
+        start_dir: Vec3 = Vec3(0, start.car_angle, 0)
+        start_speed: float = start.car_speed
+        angle: float = radians(90 - end.car_angle)
+        end_dir: Vec2 = Vec2(cos(angle), sin(angle))
+        end_pts: tuple[Vec2, Vec2] = Checkpoint.compute_end_pts(
+            Vec3(*end.car_position).xz - end_dir * .5,
+            end_dir,
+            end.raycast_distances[0],
+            end.raycast_distances[-1],
+        )
+        return Checkpoint(start_pos, start_dir, start_speed, end_pts)
+
+    @staticmethod
+    def compute_end_pts(
+        car_pos: Vec2 | Vec3, car_dir: Vec2 | Vec3, left_dist: float, right_dist: float
+    ) -> tuple[Vec2, Vec2]:
+        center: Vec2 = car_pos.xz if isinstance(car_pos, Vec3) else car_pos
+        n: Vec2 = car_dir.xz if isinstance(car_dir, Vec3) else car_dir
         v: Vec2 = Vec2(n.y, -n.x)
         left: Vec2 = center - left_dist * v
         right: Vec2 = center + right_dist * v
-        self.end = (left, right)
+        return (left, right)
+
+    def set_end(self, car: Car):
+        distances: list[float] = car.multiray_sensor.collect_sensor_values()
+        self.end = self.compute_end_pts(
+            car.position, car.forward, distances[0], distances[-1]
+        )
+    
+    def distance(self, pos: Vec2) -> float:
+        if self.end is None:
+            return 0
+        d1: float = (self.end[0] - pos).length()
+        d2: float = (self.end[1] - pos).length()
+        return (d1 + d2) / 2

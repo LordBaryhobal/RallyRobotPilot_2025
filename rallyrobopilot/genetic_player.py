@@ -19,7 +19,7 @@ class GeneticPlayer:
 
         self.prev_pos: Vec3 = Vec3(0, 0, 0)
         self.reached_end: bool = False
-        self.step_till_gate: int = 0
+        self.steps_till_gate: int = 0
         self.wall_hits: int = 0
     
     def set_evaluation(self, evaluation: float):
@@ -37,7 +37,7 @@ class GeneticPlayer:
             print(f"Player {self.id} reached the end")
         
         if not self.reached_end:
-            self.step_till_gate += 1
+            self.steps_till_gate += 1
 
         if car.hitting_wall:
             self.wall_hits += 1

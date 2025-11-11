@@ -17,7 +17,6 @@ class GeneticManager:
         self,
         app: Ursina,
         track: Track,
-        checkpoint: Checkpoint,
         pop_size: int = 20,
         dna_length: int = 100,
         generations: int = 30,
@@ -28,7 +27,7 @@ class GeneticManager:
     ):
         self.app: Ursina = app
         self.track: Track = track
-        self.checkpoint: Checkpoint = checkpoint
+        self.segment: TrajectorySegment = TrajectorySegment()
         self.pop_size: int = pop_size
         self.dna_length: int = dna_length
         self.generations: int = generations
@@ -42,6 +41,7 @@ class GeneticManager:
         self.cars[0].camera_follow = True
         self.cars[0].change_camera = True
         self.population: list[GeneticPlayer] = self.generate_population()
+        self.checkpoint_manager: CheckpointManager = CheckpointManager()
 
     def new_car(self) -> Car:
         car = Car()
@@ -128,26 +128,24 @@ class GeneticManager:
 
     def reset_cars(self):
         for car in self.cars:
-            self.checkpoint.reset_car(car)
+            self.segment.checkpoint.reset_car(car)
 
     def evaluate_all(self):
-        if self.checkpoint.end is None:
+        if self.segment.checkpoint.end is None:
             return
         for player, car in zip(self.population, self.cars):
-            self.checkpoint.reset_car(car)
+            self.segment.checkpoint.reset_car(car)
             player.prev_pos = car.position
-        self.start_pos = self.cars[0].position
+        start_pos: Vec2 = self.cars[0].position.xz
         
         for _ in range(self.dna_length):
             for player, car in zip(self.population, self.cars):
-                player.infer(car, self.checkpoint)
+                player.infer(car, self.segment.checkpoint)
             self.app.step()
-        
+
         for player, car in zip(self.population, self.cars):
-            end_pos: Vec3 = car.position
-            start_dist: float = (end_pos - self.start_pos).length()
-            end_dist1: float = (self.checkpoint.end[0] - self.start_pos.xz).length()
-            end_dist2: float = (self.checkpoint.end[1] - self.start_pos.xz).length()
-            end_dist: float = (end_dist1 + end_dist2) / 2
-            player.set_evaluation(player.step_till_gate / start_dist * end_dist * (player.wall_hits + 1))
+            end_pos: Vec2 = car.position.xz
+            start_dist: float = (end_pos - start_pos).length()
+            end_dist: float = self.segment.checkpoint.distance(end_pos)
+            player.set_evaluation(player.steps_till_gate / start_dist * end_dist * (player.wall_hits + 1))
             print(f"  Player {player.id}: {player.evaluation}")
