@@ -380,10 +380,10 @@ class Car(Entity):
         self.position = self.reset_position
         #y_ray = raycast(origin = self.reset_position, direction = (0,-1,0), ignore = [self,])
         #self.y = y_ray.world_point.y + 1.4
-        print(self.reset_orientation)
+        #print(self.reset_orientation)
         self.rotation_y = self.reset_orientation[1]
 
-        print("reseting at", str(self.position), " --> ", self.rotation_y)
+        #print("reseting at", str(self.position), " --> ", self.rotation_y)
 
         camera.world_rotation_y = self.rotation_y
         self.speed = 0

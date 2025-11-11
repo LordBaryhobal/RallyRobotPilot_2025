@@ -32,7 +32,7 @@ class GeneticPlayer:
         car.keys["s"] = bool(controls[1])
         car.keys["a"] = bool(controls[2])
         car.keys["d"] = bool(controls[3])
-        if checkpoint.intersects(self.prev_pos, car.position):
+        if checkpoint.intersects(self.prev_pos.xz, car.position.xz):
             self.reached_end = True
             print(f"Player {self.id} reached the end")
         
