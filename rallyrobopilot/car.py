@@ -6,7 +6,7 @@ from math import pow, atan2
 sign = lambda x: -1 if x < 0 else (1 if x > 0 else 0)
 Text.default_resolution = 1080 * Text.size
 
-DELTA_TIME = 1 / 36
+DELTA_TIME = 1 / 40
 
 class Car(Entity):
     def __init__(self, position = (0, 0, 4), rotation = (0, 0, 0), topspeed = 30, acceleration = 0.35, braking_strength = 30, friction = 1.5, camera_speed = 8):

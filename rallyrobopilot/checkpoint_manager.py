@@ -18,7 +18,6 @@ class CheckpointManager(Entity):
         self.checkpoints: list[Checkpoint] = []
         self.pending: Optional[Checkpoint] = None
         self.entities: list[Entity] = []
-        self.load()
 
     @staticmethod
     def deserialize(data: dict) -> Checkpoint:

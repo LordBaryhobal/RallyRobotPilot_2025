@@ -16,8 +16,7 @@ def main():
     print("Flask server running on port 5000")
     flask_thread.start()
 
-    app, track = prepare_game_app("SimpleTrack/track_metadata.json")
-    # remote_controller = RemoteController(car = car, connection_port=7654, flask_app=flask_app)
+    app, _, track = prepare_game_app("SimpleTrack/track_metadata.json")
 
     cm: CheckpointManager = CheckpointManager()
     gm: GeneticManager = GeneticManager(app, track, cm.checkpoints[0])
