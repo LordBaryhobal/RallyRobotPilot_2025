@@ -2,6 +2,7 @@ import json
 import random
 
 from matplotlib import pyplot as plt
+from rallyrobopilot.sun import SunLight
 from rallyrobopilot.trajectory import Trajectory
 from ursina import Ursina
 from ursina.vec2 import Vec2
@@ -42,6 +43,7 @@ class GeneticManager:
             car.ignore_collisions = self.cars
         self.cars[0].camera_follow = True
         self.cars[0].change_camera = True
+        self.sun = SunLight(direction = (-0.7, -0.9, 0.5), resolution = 3072, car = self.cars[0])
         self.population: list[GeneticPlayer] = self.generate_population()
         self.checkpoint_manager: CheckpointManager = CheckpointManager()
         self.ref_trajectory: Trajectory = Trajectory(color=rgb(210, 50, 50, 200))
