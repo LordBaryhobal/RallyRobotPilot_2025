@@ -4,8 +4,9 @@ import json
 from collections import deque
 from dataclasses import dataclass, field
 from io import TextIOWrapper
+from math import acos, radians, sqrt
 from pathlib import Path
-from typing import Generic, Optional, TypeVar
+from typing import Callable, Generic, Optional, TypeVar
 
 T = TypeVar("T")
 MAX_FACES_PER_MESH = 100
@@ -26,10 +27,43 @@ class ReIndexer(Generic[T]):
         return [self.lst[i] for i in self.indices]
 
 
+class Simplifier(Generic[T]):
+    def __init__(
+        self, lst: list[T], cmp: Callable[[T, T, float], bool], thresh: float
+    ) -> None:
+        self.lst: list[T] = lst
+        self.cmp: Callable[[T, T, float], bool] = cmp
+        self.thresh: float = thresh
+        self.indices: list[int] = list(range(len(self.lst)))
+        self.simplify()
+
+    def simplify(self):
+        for i in range(len(self.lst)):
+            for j in range(i + 1, len(self.lst)):
+                if self.cmp(self.lst[i], self.lst[j], self.thresh):
+                    self.indices[j] = self.indices[i]
+
+    def map_many(self, indices: tuple[int, ...]) -> tuple[int, ...]:
+        return tuple(self.map(i) for i in indices)
+
+    def map(self, idx: int) -> int:
+        return self.indices[idx]
+
+    def print_stats(self, name: str):
+        before: int = len(self.lst)
+        after: int = sum(int(i == j) for i, j in enumerate(self.indices))
+        if before != after:
+            print(f"Simplified {name}: {before} -> {after}")
+
+
 @dataclass
 class Vec2:
     x: float = 0
     y: float = 0
+
+    @staticmethod
+    def abs_diff(a: Vec2, b: Vec2, thresh: float) -> bool:
+        return abs(a.x - b.x) < thresh and abs(a.y - b.y) < thresh
 
 
 @dataclass
@@ -37,6 +71,28 @@ class Vec3:
     x: float = 0
     y: float = 0
     z: float = 0
+
+    def dot(self, other: Vec3) -> float:
+        return self.x * other.x + self.y * other.y + self.z * other.z
+
+    def length(self) -> float:
+        return sqrt(self.dot(self))
+
+    @staticmethod
+    def abs_diff(a: Vec3, b: Vec3, thresh: float) -> bool:
+        return (
+            abs(a.x - b.x) < thresh
+            and abs(a.y - b.y) < thresh
+            and abs(a.z - b.z) < thresh
+        )
+
+    @staticmethod
+    def angle_diff(a: Vec3, b: Vec3, thresh: float) -> bool:
+        dot: float = a.dot(b)
+        a_len: float = a.length()
+        b_len: float = b.length()
+        cos: float = dot / a_len / b_len
+        return acos(max(-1, min(1, cos))) < thresh
 
 
 @dataclass
@@ -80,6 +136,22 @@ class Mesh:
         self.normals = normals_idx.get_new_list()
         self.uvs = uvs_idx.get_new_list()
 
+    def merge(self):
+        pts_simplifier: Simplifier[Vec3] = Simplifier(self.pts, Vec3.abs_diff, 1)
+        normals_simplifier: Simplifier[Vec3] = Simplifier(
+            self.normals, Vec3.angle_diff, radians(1)
+        )
+        uvs_simplifier: Simplifier[Vec2] = Simplifier(self.uvs, Vec2.abs_diff, 0.001)
+
+        for face in self.faces:
+            face.pts = pts_simplifier.map_many(face.pts)
+            face.normals = normals_simplifier.map_many(face.normals)
+            face.uvs = uvs_simplifier.map_many(face.uvs)
+
+        pts_simplifier.print_stats("vertices")
+        normals_simplifier.print_stats("normals")
+        uvs_simplifier.print_stats("uvs")
+
     def split(self) -> list[Mesh]:
         n_faces: int = len(self.faces)
         adjacent: list[set[int]] = [set() for _ in range(n_faces)]
@@ -97,10 +169,10 @@ class Mesh:
                 unassigned, adjacent, MAX_FACES_PER_MESH
             )
             unassigned -= set(cluster)
-
             submesh: Mesh = Mesh(faces=[self.faces[i] for i in cluster])
             submesh.extract(self.pts, self.normals, self.uvs)
             submeshes.append(submesh)
+            print(f"Cluster {len(submeshes)}: {len(cluster)} faces")
 
         return submeshes
 
@@ -185,7 +257,9 @@ class MeshSplitter:
 
             print(f"{len(pts)} pts, {len(normals)} normals, {len(uvs)} uvs")
             for obj in self.objects:
+                print(obj.name)
                 obj.mesh.extract(pts, normals, uvs)
+                obj.mesh.merge()
 
             i: int = 0
             while i < len(self.objects):
