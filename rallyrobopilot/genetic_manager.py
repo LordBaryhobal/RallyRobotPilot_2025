@@ -2,8 +2,10 @@ import json
 import random
 
 from matplotlib import pyplot as plt
+from rallyrobopilot.trajectory import Trajectory
 from ursina import Ursina
 from ursina.vec2 import Vec2
+from ursina.color import rgb
 
 from rallyrobopilot.car import Car
 from rallyrobopilot.checkpoint_manager import CheckpointManager
@@ -42,6 +44,9 @@ class GeneticManager:
         self.cars[0].change_camera = True
         self.population: list[GeneticPlayer] = self.generate_population()
         self.checkpoint_manager: CheckpointManager = CheckpointManager()
+        self.ref_trajectory: Trajectory = Trajectory(color=rgb(210, 50, 50, 200))
+        self.best_trajectory: Trajectory = Trajectory(color=rgb(50, 210, 50, 200))
+        self.best_player: GeneticPlayer = GeneticPlayer(0, [])
 
     def new_car(self) -> Car:
         car = Car()
@@ -58,6 +63,10 @@ class GeneticManager:
         for gen in range(self.generations):
             print(f"Generation {gen + 1}/{self.generations}")
             self.evaluate_all()
+            best: GeneticPlayer = sorted(self.population, key=lambda p: p.evaluation)[0]
+            if gen == 0 or best.evaluation < self.best_player.evaluation:
+                self.best_player = best
+                self.best_trajectory.set_pts(best.trajectory)
             evals: list[float] = [c.evaluation for c in self.population]
             tot_eval: float = sum(evals)
             mean_eval: float = tot_eval / self.pop_size
@@ -82,6 +91,7 @@ class GeneticManager:
         plt.plot(range(self.generations), best_evals, label="Best")
         plt.xlabel("Generation")
         plt.ylabel("Evaluation")
+        plt.yscale("symlog")
         plt.title("Evaluation evolution")
         plt.legend()
         plt.savefig("evolution.png")
@@ -183,6 +193,7 @@ class GeneticManager:
     def optimize(self, segment: TrajectorySegment) -> GeneticPlayer:
         self.segment = segment
         self.checkpoint_manager.add_entity(self.segment.checkpoint)
+        self.ref_trajectory.set_pts(self.segment.trajectory)
         self.init_pop_from_segment(self.segment)
         return self.execute()
 

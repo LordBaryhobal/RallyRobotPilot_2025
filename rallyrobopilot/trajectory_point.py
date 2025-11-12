@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from rallyrobopilot.car import Car
 from ursina.vec2 import Vec2
@@ -11,9 +11,9 @@ from rallyrobopilot.sensing_message import SensingSnapshot
 
 @dataclass
 class TrajectoryPoint:
-    pos: Vec2
-    angle: float
-    speed: float
+    pos: Vec2 = field(default_factory=Vec2)
+    angle: float = 0
+    speed: float = 0
 
     @staticmethod
     def from_snapshot(snapshot: SensingSnapshot) -> TrajectoryPoint:

@@ -12,6 +12,7 @@ class Car(Entity):
     def __init__(self, position = (0, 0, 4), rotation = (0, 0, 0), topspeed = 30, acceleration = 0.35, braking_strength = 30, friction = 1.5, camera_speed = 8):
         super().__init__(
             model = "assets/cars/sports-car.obj",
+            texture = "assets/cars/garage/sports-car/sports-red.png",
             collider = "sphere",
             position = position,
             rotation = rotation,

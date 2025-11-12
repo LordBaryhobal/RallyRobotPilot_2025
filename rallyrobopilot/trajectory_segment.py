@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
 from rallyrobopilot.genetic_player import FrameInput
+from rallyrobopilot.trajectory_point import TrajectoryPoint
 from ursina.vec3 import Vec3
 
 from rallyrobopilot.checkpoint import Checkpoint
@@ -15,6 +16,10 @@ class TrajectorySegment:
     )
     start_i: int = 0
     end_i: int = 0
+    trajectory: list[TrajectoryPoint] = field(init = False)
+
+    def __post_init__(self):
+        self.trajectory = [TrajectoryPoint.from_snapshot(s) for s in self.snapshots]
 
     @property
     def length(self) -> int:
