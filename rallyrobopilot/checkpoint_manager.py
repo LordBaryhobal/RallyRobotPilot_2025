@@ -13,11 +13,12 @@ from rallyrobopilot.checkpoint import Checkpoint
 class CheckpointManager(Entity):
     SAVE_PATH: Path = Path("checkpoints.json")
 
-    def __init__(self):
+    def __init__(self,car=None):
         super().__init__()
         self.checkpoints: list[Checkpoint] = []
         self.pending: Optional[Checkpoint] = None
         self.entities: list[Entity] = []
+        self.car = car
 
     @staticmethod
     def deserialize(data: dict) -> Checkpoint:

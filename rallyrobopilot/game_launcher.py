@@ -65,7 +65,7 @@ def prepare_game_app(track_name = "NotSoSimpleTrack", init_car = False):
     track.activate()
     track.played = True
 
-    checkpoint_manager = CheckpointManager()
+    checkpoint_manager = CheckpointManager(car=car)
     checkpoint_manager.enable()
     checkpoint_manager.add_entities()
    

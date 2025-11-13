@@ -1,7 +1,9 @@
 import lzma
 import os
 import pickle
+from threading import Thread
 
+from flask import Flask
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -11,6 +13,8 @@ import tqdm
 from PyQt6 import QtWidgets
 from sklearn.model_selection import train_test_split
 
+from rallyrobopilot.game_launcher import prepare_game_app
+from rallyrobopilot.recorder import Recorder
 from rallyrobopilot.sensing_message import SensingSnapshot
 
 
@@ -143,7 +147,6 @@ if  __name__ == "__main__":
         racer = VisualRacer()
         racer.train()
     else:
-        from .data_collector import DataCollectionUI
         
         def except_hook(cls, exception, traceback):
             sys.__excepthook__(cls, exception, traceback)
@@ -153,7 +156,12 @@ if  __name__ == "__main__":
 
         nn_brain = VisualRacer()
         nn_brain.load_model("models/model.pt")
-        data_window = DataCollectionUI(nn_brain.process_message)
-        data_window.show()
+        flask_app = Flask(__name__)
+        flask_thread = Thread(target=flask_app.run, kwargs={'host': "0.0.0.0", 'port': 5000})
+        print("Flask server running on port 5000")
+        flask_thread.start()
 
-        app.exec()
+        app, car, track = prepare_game_app("SimpleTrack/track_metadata.json", True)
+        recorder: Recorder = Recorder(car)
+        recorder.enable()
+        app.run()

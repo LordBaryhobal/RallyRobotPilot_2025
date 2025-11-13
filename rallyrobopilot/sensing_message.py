@@ -4,6 +4,8 @@ import struct
 
 import numpy as np
 
+from rallyrobopilot.car import Car
+
 
 def iter_unpack(format, data):
     nbr_bytes = struct.calcsize(format)
@@ -24,6 +26,15 @@ class SensingSnapshot:
         self.car_angle = 0
         self.raycast_distances = [0]
         self.image = None
+        
+    def from_car(self,car:Car):
+        self.car_position = (car.position.x, car.position.y, car.position.z)
+        self.car_speed = car.speed
+        self.car_angle = car.rotation_y
+        self.current_controls = (int(car.keys["w"]), int(car.keys["s"]),
+                                 int(car.keys["a"]), int(car.keys["d"]))
+        self.raycast_distances = car.multiray_sensor.collect_sensor_values()
+        return self
 
     def pack(self):
         byte_data = b''
