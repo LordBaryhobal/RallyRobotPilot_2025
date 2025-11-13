@@ -4,11 +4,11 @@ from ursina import *
 from rallyrobopilot.checkpoint_manager import CheckpointManager
 
 
-def prepare_game_app(track_name = "SimpleTrack", init_car = False):
+def prepare_game_app(track_name = "NotSoSimpleTrack", init_car = False):
     from ursina import window, Ursina
     
     # Create Window
-    window.vsync = False # Set to false to uncap FPS limit of 60
+    window.vsync = True # Set to false to uncap FPS limit of 60
     app = Ursina(size=(600, 400))
     print("Asset folder")
     print(application.asset_folder)

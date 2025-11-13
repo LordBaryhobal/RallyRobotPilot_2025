@@ -1,7 +1,7 @@
 import lzma
 import pickle
 import random
-
+import math
 from rallyrobopilot.checkpoint import Checkpoint
 from rallyrobopilot.genetic_player import FrameInput
 from rallyrobopilot.sensing_message import SensingSnapshot
@@ -21,6 +21,23 @@ class TrajectoryOptimizer:
             self.snapshots = pickle.load(file)
 
         self.trajectory = list(map(TrajectoryPoint.from_snapshot, self.snapshots))
+        
+    def count_segment(self,length:int = 100):
+        return math.ceil(len(self.snapshots) / length)
+        
+    def load_segment(self, index: int, length: int = 100) -> TrajectorySegment:
+        start_i: int = index * length
+        end_i: int = start_i + length
+        snapshots: list[SensingSnapshot] = self.snapshots[start_i:end_i]
+        start: SensingSnapshot = snapshots[0]
+        end: SensingSnapshot = snapshots[-1]
+        checkpoint: Checkpoint = Checkpoint.from_snapshots(start, end)
+        
+        for i in range(-1, 5):
+            end_pos = self.trajectory[end_i - i].pos
+            print(f"End pos ({-i}):", end_pos.x, end_pos.y)
+        
+        return TrajectorySegment(snapshots, checkpoint, start_i, end_i)
 
     def random_segment(self, length: int = 100) -> TrajectorySegment:
         start_i: int = random.randint(0, len(self.snapshots) - length)
