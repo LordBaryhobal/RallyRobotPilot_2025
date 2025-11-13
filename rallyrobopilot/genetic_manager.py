@@ -174,13 +174,7 @@ class GeneticManager:
         for child in children:
             if random.random() >= self.settings.mutation_rate:
                 continue
-
-            width: int = random.randint(1, 5)
-            i: int = random.randint(0, self.settings.dna_length - width)
-            frame: FrameInput = child.random_frame()
-
-            for j in range(width):
-                child.dna[i + j] = frame
+            self.settings.mutation_strategy.mutate(child.dna, self.settings.mutation_prob, self.settings.flip_prob)
 
     def reset_cars(self):
         for car in self.cars:
