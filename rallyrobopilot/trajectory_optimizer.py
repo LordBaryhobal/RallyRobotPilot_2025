@@ -3,7 +3,6 @@ import pickle
 import random
 
 from rallyrobopilot.checkpoint import Checkpoint
-from rallyrobopilot.genetic_player import FrameInput
 from rallyrobopilot.sensing_message import SensingSnapshot
 from rallyrobopilot.trajectory_point import TrajectoryPoint
 from rallyrobopilot.trajectory_segment import TrajectorySegment
@@ -29,5 +28,5 @@ class TrajectoryOptimizer:
         start: SensingSnapshot = snapshots[0]
         end: SensingSnapshot = snapshots[-1]
         checkpoint: Checkpoint = Checkpoint.from_snapshots(start, end)
-        
+
         return TrajectorySegment(snapshots, checkpoint, start_i, end_i)

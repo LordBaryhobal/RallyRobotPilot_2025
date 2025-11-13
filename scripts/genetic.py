@@ -1,5 +1,7 @@
+import argparse
 import random
 from threading import Thread
+from typing import Optional
 
 from flask import Flask
 
@@ -13,8 +15,7 @@ from rallyrobopilot.trajectory_segment import TrajectorySegment
 plots: bool = False
 
 
-def main():
-
+def main(segment_len: int, n_gens: int, record_path: str, seed: Optional[int]):
     flask_app = Flask(__name__)
     flask_thread = Thread(
         target=flask_app.run, kwargs={"host": "0.0.0.0", "port": 5000}
@@ -24,10 +25,11 @@ def main():
 
     app, _, track = prepare_game_app("SimpleTrack/track_metadata.json")
 
-    to: TrajectoryOptimizer = TrajectoryOptimizer("record_0.npz")
-    random.seed(42)
-    gm: GeneticManager = GeneticManager(app, track)
-    segment: TrajectorySegment = to.random_segment(30)
+    to: TrajectoryOptimizer = TrajectoryOptimizer(record_path)
+    gm: GeneticManager = GeneticManager(app, track, generations=n_gens)
+    if seed is not None:
+        random.seed(seed)
+    segment: TrajectorySegment = to.random_segment(segment_len)
     traj_real: list[TrajectoryPoint] = [
         TrajectoryPoint.from_snapshot(s) for s in segment.snapshots
     ][:-1]
@@ -112,4 +114,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-l", "--len", help="Number of frames in a segment", type=int, default=100)
+    parser.add_argument("-g", "--gens", help="Number of generations", type=int, default=30)
+    parser.add_argument("-r", "--record", help="Reference record file", default="record_0.npz")
+    parser.add_argument("-s", "--seed", help="RNG seed", type=int)
+    args = parser.parse_args()
+    main(args.len, args.gens, args.record, args.seed)
