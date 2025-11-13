@@ -30,8 +30,4 @@ class TrajectoryOptimizer:
         end: SensingSnapshot = snapshots[-1]
         checkpoint: Checkpoint = Checkpoint.from_snapshots(start, end)
         
-        for i in range(-1, 5):
-            end_pos = self.trajectory[end_i - i].pos
-            print(f"End pos ({-i}):", end_pos.x, end_pos.y)
-        
         return TrajectorySegment(snapshots, checkpoint, start_i, end_i)

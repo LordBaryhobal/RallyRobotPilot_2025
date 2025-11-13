@@ -1,17 +1,18 @@
 import json
 import random
 
+import tqdm
 from matplotlib import pyplot as plt
-from rallyrobopilot.sun import SunLight
-from rallyrobopilot.trajectory import Trajectory
 from ursina import Ursina
-from ursina.vec2 import Vec2
 from ursina.color import rgb
+from ursina.vec2 import Vec2
 
 from rallyrobopilot.car import Car
 from rallyrobopilot.checkpoint_manager import CheckpointManager
 from rallyrobopilot.genetic_player import FrameInput, GeneticPlayer
+from rallyrobopilot.sun import SunLight
 from rallyrobopilot.track import Track
+from rallyrobopilot.trajectory import Trajectory
 from rallyrobopilot.trajectory_segment import TrajectorySegment
 
 
@@ -43,7 +44,9 @@ class GeneticManager:
             car.ignore_collisions = self.cars
         self.cars[0].camera_follow = True
         self.cars[0].change_camera = True
-        self.sun = SunLight(direction = (-0.7, -0.9, 0.5), resolution = 3072, car = self.cars[0])
+        self.sun = SunLight(
+            direction=(-0.7, -0.9, 0.5), resolution=3072, car=self.cars[0]
+        )
         self.population: list[GeneticPlayer] = self.generate_population()
         self.checkpoint_manager: CheckpointManager = CheckpointManager()
         self.ref_trajectory: Trajectory = Trajectory(color=rgb(210, 50, 50, 200))
@@ -58,29 +61,33 @@ class GeneticManager:
         car.enable()
         return car
 
-    def execute(self) -> GeneticPlayer:
+    def execute(self, plots: bool = False) -> GeneticPlayer:
         mean_evals: list[float] = []
         best_evals: list[float] = []
-        
-        for gen in range(self.generations):
-            print(f"Generation {gen + 1}/{self.generations}")
-            self.evaluate_all()
-            best: GeneticPlayer = sorted(self.population, key=lambda p: p.evaluation)[0]
-            if gen == 0 or best.evaluation < self.best_player.evaluation:
-                self.best_player = best
-                self.best_trajectory.set_pts(best.trajectory)
-            evals: list[float] = [c.evaluation for c in self.population]
-            tot_eval: float = sum(evals)
-            mean_eval: float = tot_eval / self.pop_size
-            min_eval: float = min(evals)
-            mean_evals.append(mean_eval)
-            best_evals.append(min_eval)
-            print(f"Gen {gen} - avg={mean_eval:.2f} min={min_eval:.2f}")
+        best_steps: list[int] = []
 
-            parents: list[GeneticPlayer] = self.select()
-            children: list[GeneticPlayer] = self.crossover(parents)
-            self.mutate(children)
-            self.population = children
+        with tqdm.trange(self.generations, desc="Generation", unit="gen") as p:
+            for gen in p:
+                self.evaluate_all()
+                best: GeneticPlayer = sorted(
+                    self.population, key=lambda p: p.evaluation
+                )[0]
+                best_steps.append(best.steps_till_gate)
+                if gen == 0 or best.evaluation < self.best_player.evaluation:
+                    self.best_player = best
+                    self.best_trajectory.set_pts(best.trajectory)
+                evals: list[float] = [c.evaluation for c in self.population]
+                tot_eval: float = sum(evals)
+                mean_eval: float = tot_eval / self.pop_size
+                min_eval: float = min(evals)
+                mean_evals.append(mean_eval)
+                best_evals.append(min_eval)
+                p.set_postfix_str(f"avg={mean_eval:.2f} min={min_eval:.2f}")
+
+                parents: list[GeneticPlayer] = self.select()
+                children: list[GeneticPlayer] = self.crossover(parents)
+                self.mutate(children)
+                self.population = children
 
         self.evaluate_all()
 
@@ -89,15 +96,20 @@ class GeneticManager:
         with open("best.json", "w") as f:
             json.dump(best.dna, f)
 
-        plt.plot(range(self.generations), mean_evals, label="Mean")
-        plt.plot(range(self.generations), best_evals, label="Best")
-        plt.xlabel("Generation")
-        plt.ylabel("Evaluation")
-        plt.yscale("symlog")
-        plt.title("Evaluation evolution")
-        plt.legend()
-        plt.savefig("evolution.png")
-        
+        if plots:
+            fig, axes = plt.subplots(1, 2)
+            axes[0].plot(range(self.generations), mean_evals, label="Mean")
+            axes[0].plot(range(self.generations), best_evals, label="Best")
+            axes[0].set_xlabel("Generation")
+            axes[0].set_ylabel("Evaluation")
+            axes[0].set_yscale("symlog")
+            axes[0].set_title("Evaluation evolution")
+            axes[1].plot(range(self.generations), best_steps, label="Steps until gate")
+            axes[1].set_xlabel("Generation")
+            axes[1].set_ylabel("Steps")
+            plt.legend()
+            plt.savefig("evolution.png")
+
         return best
 
     def generate_population(self) -> list[GeneticPlayer]:
@@ -142,7 +154,7 @@ class GeneticManager:
         for child in children:
             if random.random() >= self.mutation_rate:
                 continue
-            
+
             width: int = random.randint(1, 5)
             i: int = random.randint(0, self.dna_length - width)
             frame: FrameInput = child.random_frame()
@@ -161,26 +173,26 @@ class GeneticManager:
             self.segment.checkpoint.reset_car(car)
             player.prev_pos = car.position
         start_pos: Vec2 = self.cars[0].position.xz
-        
+
         for _ in range(1, self.dna_length):
             for player, car in zip(self.population, self.cars):
                 player.infer(car, self.segment.checkpoint)
-            self.app.step() # type: ignore
+            self.app.step()  # type: ignore
 
         for player, car in zip(self.population, self.cars):
             end_pos: Vec2 = car.position.xz
             start_dist: float = (end_pos - start_pos).length()
             end_dist: float = self.segment.checkpoint.distance(end_pos)
             max_dist: float = self.segment.checkpoint.distance(start_pos)
-            
+
             if player.reached_end:
                 end_dist = 0
             else:
                 player.steps_till_gate += 1
-            
+
             d: float = end_dist / max_dist
             t: float = player.steps_till_gate / self.segment.length
-            
+
             if player.wall_hits > 0:
                 fitness = 1000 + player.wall_hits * 100
             elif player.reached_end:
