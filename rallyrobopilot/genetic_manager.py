@@ -1,6 +1,10 @@
 import json
 import random
+from dataclasses import asdict
+from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import tqdm
 from matplotlib import pyplot as plt
 from ursina import Ursina
@@ -9,7 +13,9 @@ from ursina.vec2 import Vec2
 
 from rallyrobopilot.car import Car
 from rallyrobopilot.checkpoint_manager import CheckpointManager
+from rallyrobopilot.generation_stats import GenerationStats
 from rallyrobopilot.genetic_player import FrameInput, GeneticPlayer
+from rallyrobopilot.genetic_settings import GeneticSettings
 from rallyrobopilot.sun import SunLight
 from rallyrobopilot.track import Track
 from rallyrobopilot.trajectory import Trajectory
@@ -18,28 +24,13 @@ from rallyrobopilot.trajectory_segment import TrajectorySegment
 
 class GeneticManager:
     def __init__(
-        self,
-        app: Ursina,
-        track: Track,
-        pop_size: int = 20,
-        dna_length: int = 100,
-        generations: int = 30,
-        rounds: int = 3,
-        passthrough_rate: float = 0.2,
-        mutation_rate: float = 0.6,
-        mutation_prob: float = 0.2,
+        self, app: Ursina, track: Track, out_path: Path, settings: GeneticSettings
     ):
         self.app: Ursina = app
         self.track: Track = track
         self.segment: TrajectorySegment = TrajectorySegment()
-        self.pop_size: int = pop_size
-        self.dna_length: int = dna_length
-        self.generations: int = generations
-        self.rounds: int = rounds
-        self.passthrough_rate: float = passthrough_rate
-        self.mutation_rate: float = mutation_rate
-        self.mutation_prob: float = mutation_prob
-        self.cars: list[Car] = [self.new_car() for _ in range(self.pop_size)]
+        self.settings: GeneticSettings = settings
+        self.cars: list[Car] = [self.new_car() for _ in range(self.settings.pop_size)]
         for car in self.cars:
             car.ignore_collisions = self.cars
         self.cars[0].camera_follow = True
@@ -52,6 +43,9 @@ class GeneticManager:
         self.ref_trajectory: Trajectory = Trajectory(color=rgb(210, 50, 50, 200))
         self.best_trajectory: Trajectory = Trajectory(color=rgb(50, 210, 50, 200))
         self.best_player: GeneticPlayer = GeneticPlayer(0, [])
+        self.stats: list[GenerationStats] = []
+        self.out_path: Path = out_path
+        self.out_path.mkdir(parents=True, exist_ok=True)
 
     def new_car(self) -> Car:
         car = Car()
@@ -66,7 +60,7 @@ class GeneticManager:
         best_evals: list[float] = []
         best_steps: list[int] = []
 
-        with tqdm.trange(self.generations, desc="Generation", unit="gen") as p:
+        with tqdm.trange(self.settings.generations, desc="Generation", unit="gen") as p:
             for gen in p:
                 self.evaluate_all()
                 best: GeneticPlayer = sorted(
@@ -76,13 +70,34 @@ class GeneticManager:
                 if gen == 0 or best.evaluation < self.best_player.evaluation:
                     self.best_player = best
                     self.best_trajectory.set_pts(best.trajectory)
-                evals: list[float] = [c.evaluation for c in self.population]
-                tot_eval: float = sum(evals)
-                mean_eval: float = tot_eval / self.pop_size
-                min_eval: float = min(evals)
+                evals: np.ndarray = np.array([c.evaluation for c in self.population])
+                steps: np.ndarray = np.array(
+                    [c.steps_till_gate for c in self.population]
+                )
+                mean_eval: float = float(evals.mean())
+                min_eval: float = float(evals.min())
                 mean_evals.append(mean_eval)
                 best_evals.append(min_eval)
                 p.set_postfix_str(f"avg={mean_eval:.2f} min={min_eval:.2f}")
+                median_eval: float = float(np.median(evals))
+                max_eval: float = float(evals.max())
+                min_steps: int = int(steps.min())
+                mean_steps: float = float(steps.mean())
+                median_steps: int = int(np.median(steps))
+                self.stats.append(
+                    GenerationStats(
+                        gen,
+                        self.settings.pop_size,
+                        self.settings.dna_length,
+                        min_eval,
+                        mean_eval,
+                        median_eval,
+                        max_eval,
+                        min_steps,
+                        mean_steps,
+                        median_steps,
+                    )
+                )
 
                 parents: list[GeneticPlayer] = self.select()
                 children: list[GeneticPlayer] = self.crossover(parents)
@@ -98,13 +113,15 @@ class GeneticManager:
 
         if plots:
             fig, axes = plt.subplots(1, 2)
-            axes[0].plot(range(self.generations), mean_evals, label="Mean")
-            axes[0].plot(range(self.generations), best_evals, label="Best")
+            axes[0].plot(range(self.settings.generations), mean_evals, label="Mean")
+            axes[0].plot(range(self.settings.generations), best_evals, label="Best")
             axes[0].set_xlabel("Generation")
             axes[0].set_ylabel("Evaluation")
             axes[0].set_yscale("symlog")
             axes[0].set_title("Evaluation evolution")
-            axes[1].plot(range(self.generations), best_steps, label="Steps until gate")
+            axes[1].plot(
+                range(self.settings.generations), best_steps, label="Steps until gate"
+            )
             axes[1].set_xlabel("Generation")
             axes[1].set_ylabel("Steps")
             plt.legend()
@@ -113,14 +130,17 @@ class GeneticManager:
         return best
 
     def generate_population(self) -> list[GeneticPlayer]:
-        return [GeneticPlayer.random(i, self.dna_length) for i in range(self.pop_size)]
+        return [
+            GeneticPlayer.random(i, self.settings.dna_length)
+            for i in range(self.settings.pop_size)
+        ]
 
     def select(self) -> list[GeneticPlayer]:
         parents: list[GeneticPlayer] = []
 
-        for _ in range(self.pop_size):
+        for _ in range(self.settings.pop_size):
             best: GeneticPlayer = random.choice(self.population)
-            for _ in range(self.rounds):
+            for _ in range(self.settings.rounds):
                 other: GeneticPlayer = random.choice(self.population)
                 if other.evaluation < best.evaluation:
                     best = other
@@ -131,10 +151,10 @@ class GeneticManager:
     def crossover(self, parents: list[GeneticPlayer]) -> list[GeneticPlayer]:
         children: list[GeneticPlayer] = []
 
-        for i in range(0, self.pop_size, 2):
+        for i in range(0, self.settings.pop_size, 2):
             p1: GeneticPlayer = parents[i]
             p2: GeneticPlayer = parents[i + 1]
-            if random.random() < self.passthrough_rate:
+            if random.random() < self.settings.passthrough_rate:
                 c1: GeneticPlayer = GeneticPlayer(i, p1.dna)
                 c2: GeneticPlayer = GeneticPlayer(i + 1, p2.dna)
                 c1.set_evaluation(p1.evaluation)
@@ -142,7 +162,7 @@ class GeneticManager:
                 children.extend([c1, c2])
                 continue
 
-            j: int = random.randint(1, self.dna_length - 2)
+            j: int = random.randint(1, self.settings.dna_length - 2)
 
             dna1: list = p1.dna[:j] + p2.dna[j:]
             dna2: list = p2.dna[:j] + p1.dna[j:]
@@ -152,11 +172,11 @@ class GeneticManager:
 
     def mutate(self, children: list[GeneticPlayer]):
         for child in children:
-            if random.random() >= self.mutation_rate:
+            if random.random() >= self.settings.mutation_rate:
                 continue
 
             width: int = random.randint(1, 5)
-            i: int = random.randint(0, self.dna_length - width)
+            i: int = random.randint(0, self.settings.dna_length - width)
             frame: FrameInput = child.random_frame()
 
             for j in range(width):
@@ -174,7 +194,7 @@ class GeneticManager:
             player.prev_pos = car.position
         start_pos: Vec2 = self.cars[0].position.xz
 
-        for _ in range(1, self.dna_length):
+        for _ in range(1, self.settings.dna_length):
             for player, car in zip(self.population, self.cars):
                 player.infer(car, self.segment.checkpoint)
             self.app.step()  # type: ignore
@@ -209,16 +229,23 @@ class GeneticManager:
         self.checkpoint_manager.add_entity(self.segment.checkpoint)
         self.ref_trajectory.set_pts(self.segment.trajectory)
         self.init_pop_from_segment(self.segment)
-        return self.execute()
+        best: GeneticPlayer = self.execute()
+        self.save_stats()
+        return best
 
     def init_pop_from_segment(self, segment: TrajectorySegment):
         self.population = []
-        self.dna_length = segment.length
+        self.settings.dna_length = segment.length
         dna: list[FrameInput] = []
-        for i in range(self.dna_length):
+        for i in range(self.settings.dna_length):
             dna.append(segment.frame_at(i))
 
-        for i in range(self.pop_size):
+        for i in range(self.settings.pop_size):
             self.population.append(GeneticPlayer(i, dna.copy()))
 
-        # self.mutate(self.population)
+    def save_stats(self):
+        df: pd.DataFrame = pd.DataFrame([asdict(gen) for gen in self.stats])
+        df.to_csv(self.out_path / "stats.csv", index=False)
+
+        with open(self.out_path / "settings.json", "w") as f:
+            json.dump(asdict(self.settings), f, indent=4)

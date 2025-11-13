@@ -1,13 +1,12 @@
 import argparse
 import random
-from threading import Thread
+from pathlib import Path
 from typing import Optional
-
-from flask import Flask
 
 from rallyrobopilot.game_launcher import prepare_game_app
 from rallyrobopilot.genetic_manager import GeneticManager
 from rallyrobopilot.genetic_player import GeneticPlayer
+from rallyrobopilot.genetic_settings import GeneticSettings
 from rallyrobopilot.trajectory_optimizer import TrajectoryOptimizer
 from rallyrobopilot.trajectory_point import TrajectoryPoint
 from rallyrobopilot.trajectory_segment import TrajectorySegment
@@ -15,18 +14,15 @@ from rallyrobopilot.trajectory_segment import TrajectorySegment
 plots: bool = False
 
 
-def main(segment_len: int, n_gens: int, record_path: str, seed: Optional[int]):
-    flask_app = Flask(__name__)
-    flask_thread = Thread(
-        target=flask_app.run, kwargs={"host": "0.0.0.0", "port": 5000}
-    )
-    print("Flask server running on port 5000")
-    flask_thread.start()
-
+def main(
+    segment_len: int, settings: GeneticSettings, record_path: str, seed: Optional[int]
+):
     app, _, track = prepare_game_app("SimpleTrack/track_metadata.json")
 
     to: TrajectoryOptimizer = TrajectoryOptimizer(record_path)
-    gm: GeneticManager = GeneticManager(app, track, generations=n_gens)
+    gm: GeneticManager = GeneticManager(
+        app, track, Path(__file__).parent.parent / "results" / "0", settings
+    )
     if seed is not None:
         random.seed(seed)
     segment: TrajectorySegment = to.random_segment(segment_len)
@@ -115,9 +111,55 @@ def main(segment_len: int, n_gens: int, record_path: str, seed: Optional[int]):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-l", "--len", help="Number of frames in a segment", type=int, default=100)
-    parser.add_argument("-g", "--gens", help="Number of generations", type=int, default=30)
-    parser.add_argument("-r", "--record", help="Reference record file", default="record_0.npz")
+    parser.add_argument(
+        "-l", "--len", help="Number of frames in a segment", type=int, default=100
+    )
+    parser.add_argument(
+        "-g", "--gens", help="Number of generations", type=int, default=30
+    )
+    parser.add_argument(
+        "-r", "--record", help="Reference record file", default="record_0.npz"
+    )
     parser.add_argument("-s", "--seed", help="RNG seed", type=int)
+    parser.add_argument(
+        "-p", "--pop-size", help="Population size", type=int, default=20
+    )
+    parser.add_argument(
+        "-t",
+        "--tournament-rounds",
+        help="Number of tournament rounds",
+        type=int,
+        default=3,
+    )
+    parser.add_argument(
+        "-k",
+        "--passthrough",
+        help="Passthrough rate, i.e. ratio of population passing to the next generation without crossover",
+        type=float,
+        default=0.2,
+    )
+    parser.add_argument(
+        "-m",
+        "--mutation-rate",
+        help="Mutation rate, i.e. probability of and individual to be mutated",
+        type=float,
+        default=0.6,
+    )
+    parser.add_argument(
+        "-d",
+        "--mutation-prob",
+        help="Mutation probability, i.e. probability of each gene to be modified",
+        type=float,
+        default=0.2,
+    )
     args = parser.parse_args()
-    main(args.len, args.gens, args.record, args.seed)
+    settings: GeneticSettings = GeneticSettings(
+        args.pop_size,
+        args.len,
+        args.gens,
+        args.tournament_rounds,
+        args.passthrough,
+        args.mutation_rate,
+        args.mutation_prob,
+    )
+    main(args.len, settings, args.record, args.seed)
