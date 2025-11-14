@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, replace
 import json
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
-from rallyrobopilot.mutation_strategy import MutationStrategy
+from rallyrobopilot.mutation_strategy import (
+    FrameConstruction,
+    FrameSelection,
+    MutationStrategy,
+)
 
 
 @dataclass
@@ -27,6 +31,11 @@ class GeneticSettings:
     def load(path: Path) -> GeneticSettings:
         with open(path, "r") as f:
             data: dict = json.load(f)
+
+        data["mutation_strategy"] = MutationStrategy(
+            FrameConstruction(data["mutation_strategy"]["construction"]),
+            FrameSelection(data["mutation_strategy"]["selection"]),
+        )
         return GeneticSettings(**data)
 
     def copy_with(self, **kwargs) -> GeneticSettings:
