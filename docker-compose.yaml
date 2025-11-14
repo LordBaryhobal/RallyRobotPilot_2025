@@ -14,10 +14,12 @@ services:
   #       - "/dev/dri/card0:/dev/dri/card0"
 
   headless:
+    container_name: hel_rallyrobot
     build:
       context: .
       dockerfile: Dockerfile.headless
+    restart: no
     stdin_open: true                # Keep stdin open even if not attached
     tty: true                       # Allocate a pseudo-TTY
-    ports:
-      - 5000:5000
+    volumes:
+      - ./results:/app/results

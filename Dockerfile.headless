@@ -38,12 +38,12 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir python3_xlib && \
-    pip install --no-cache-dir -e .
+    pip install --no-cache-dir python3_xlib
 
 COPY . .
+RUN pip install --no-cache-dir -e .
 
 # ============================
 # Default command
 # ============================
-CMD ["python", "scripts/main.py"]
+CMD ["python", "scripts/genetic.py"]
