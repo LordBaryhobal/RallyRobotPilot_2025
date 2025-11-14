@@ -10,12 +10,11 @@ from rallyrobopilot.sensing_message import SensingSnapshot
 
 
 class Recorder(Entity):
-    def __init__(self, car: Car,callback_sensor) -> None:
+    def __init__(self, car: Car) -> None:
         super().__init__()
         self.car: Car = car
         self.snapshots: list[SensingSnapshot] = []
         self.recording: bool = False
-        self.callback_sensor = callback_sensor
 
     def take_snapshot(self) -> SensingSnapshot:
         snapshot = SensingSnapshot()
@@ -28,7 +27,7 @@ class Recorder(Entity):
         snapshot.car_position = self.car.world_position
         snapshot.car_speed = self.car.speed
         snapshot.car_angle = self.car.rotation_y
-        snapshot.raycast_distances = self.callback_sensor()
+        snapshot.raycast_distances = self.car.multiray_sensor.collect_sensor_values()
         tex = base.win.getDisplayRegion(0).getScreenshot()
         arr = tex.getRamImageAs("RGB")
         data = np.frombuffer(arr, np.uint8)

@@ -214,15 +214,9 @@ class SuperRacer(Entity):
         if "optimizer_state" in checkpoint:
             self.optimizer.load_state_dict(checkpoint["optimizer_state"])
             
-    def callback_sensor(self):
-        while self.raycast_distances is None:
-            pass
-        return self.raycast_distances
-    
     def update(self):
         if self.auto_pilot:
             message: SensingSnapshot = SensingSnapshot().from_car(self.car)
-            self.raycast_distances = message.raycast_distances
             output =  racer.nn_infer(message)
             self.car.keys["w"] = output[0]
             self.car.keys["s"] = output[1]
