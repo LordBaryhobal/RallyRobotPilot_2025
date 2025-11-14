@@ -1,13 +1,14 @@
 from __future__ import annotations
+
 import random
 
-from rallyrobopilot.trajectory_point import TrajectoryPoint
 from ursina import Vec3
 
 from rallyrobopilot.car import Car
 from rallyrobopilot.checkpoint import Checkpoint
+from rallyrobopilot.frame_input import FrameInput
+from rallyrobopilot.trajectory_point import TrajectoryPoint
 
-FrameInput = tuple[int, int, int, int]
 
 class GeneticPlayer:
     def __init__(self, id: int, dna: list[FrameInput]):
@@ -23,11 +24,14 @@ class GeneticPlayer:
         self.steps_till_gate: int = 0
         self.wall_hits: int = 0
         self.trajectory: list[TrajectoryPoint] = []
-    
+
+    def reset(self):
+        self.i = 1
+
     def set_evaluation(self, evaluation: float):
         self.evaluation = evaluation
         self.evaluated = True
-    
+
     def infer(self, car: Car, checkpoint: Checkpoint):
         controls: FrameInput = self.get_inputs()
         car.keys["w"] = bool(controls[0])
@@ -35,11 +39,11 @@ class GeneticPlayer:
         car.keys["a"] = bool(controls[2])
         car.keys["d"] = bool(controls[3])
         self.trajectory.append(TrajectoryPoint.from_car(car))
-        
+
         if checkpoint.intersects(self.prev_pos.xz, car.position.xz):
             self.reached_end = True
             print(f"Player {self.id} reached the end")
-        
+
         if not self.reached_end:
             self.steps_till_gate += 1
 
@@ -48,7 +52,7 @@ class GeneticPlayer:
 
         self.prev_pos = car.position
         self.i += 1
-    
+
     def get_inputs(self):
         if self.i >= len(self.dna):
             return (0, 0, 0, 0)
@@ -57,11 +61,10 @@ class GeneticPlayer:
 
     @staticmethod
     def random(id: int, dna_length: int) -> GeneticPlayer:
-        return GeneticPlayer(id, [
-            GeneticPlayer.random_frame()
-            for _ in range(dna_length)
-        ])
-    
+        return GeneticPlayer(
+            id, [GeneticPlayer.random_frame() for _ in range(dna_length)]
+        )
+
     @staticmethod
     def random_frame() -> FrameInput:
         return (

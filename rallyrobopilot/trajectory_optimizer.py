@@ -20,6 +20,10 @@ class TrajectoryOptimizer:
             self.snapshots = pickle.load(file)
 
         self.trajectory = list(map(TrajectoryPoint.from_snapshot, self.snapshots))
+    
+    def full_segment(self) -> TrajectorySegment:
+        checkpoint: Checkpoint = Checkpoint.from_snapshots(self.snapshots[0], self.snapshots[-1])
+        return TrajectorySegment(self.snapshots, checkpoint, 0, len(self.snapshots))
 
     def random_segment(self, length: int = 100) -> TrajectorySegment:
         start_i: int = random.randint(0, len(self.snapshots) - length)

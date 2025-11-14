@@ -2,7 +2,7 @@ import json
 import os
 from pathlib import Path
 from typing import Optional
-from ursina import Entity, color
+from ursina import Entity, color, scene
 from ursina.vec2 import Vec2
 from ursina.vec3 import Vec3
 
@@ -97,3 +97,9 @@ class CheckpointManager(Entity):
     def add_entities(self):
         for cp in self.checkpoints:
             self.add_entity(cp)
+    
+    def remove_entities(self):
+        for entity in self.entities:
+            entity.disable()
+            scene.entities.remove(entity)
+        self.entities = []

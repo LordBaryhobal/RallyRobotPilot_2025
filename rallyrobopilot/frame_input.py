@@ -1,0 +1,1 @@
+FrameInput = tuple[int, int, int, int]
