@@ -54,7 +54,7 @@ class VisualRacer:
         return output
     
     def train(self):
-        folder = "data"
+        folder = "data_images"
         X = []
         y = []
         for filename in os.listdir(folder):
@@ -62,11 +62,20 @@ class VisualRacer:
                 continue
             with lzma.open(os.path.join(folder, filename), "rb") as file:
                 data = pickle.load(file)
-                for frame in data:
-                    X.append(frame.image)
+                for i,frame in enumerate(data):
+                    print(i)
+                    last_images = []
+                    for i1 in range(i-5,i):
+                        if i1 >= 0:
+                            last_images.append(data[i1].image)
+                        else:
+                            last_images.append(data[i].image)
+                
+                    X.append({"image": frame.image,"last_images":last_images})
                     y.append(frame.current_controls)
-                    
+        print(X)
         X = torch.tensor(np.array(X)).float() / 255.0
+        print(X)
         y = torch.tensor(np.array(y)).float()
         X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=0.8)
         

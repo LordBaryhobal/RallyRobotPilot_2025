@@ -243,7 +243,7 @@ if  __name__ == "__main__":
             sys.__excepthook__(cls, exception, traceback)
         sys.excepthook = except_hook
 
-        app, car, track = prepare_game_app("SimpleTrack/track_metadata.json", True)
+        app, car, track = prepare_game_app("VisualTrack/track_metadata.json", True)
         racer.car = car
         recorder: Recorder = Recorder(car)
         recorder.enable()
