@@ -86,11 +86,12 @@ def run_ga(pair: tuple[int, tuple[int, GeneticSettings]]):
 
     app, _, track = prepare_game_app("SimpleTrack/track_metadata.json")
     to: TrajectoryOptimizer = TrajectoryOptimizer(RECORD_PATH)
-    dir: Path = Path(__file__).parent.parent / "results" / f"conf_{i}" / f"seed_{seed}"
-    gm: GeneticManager = GeneticManager(app, track, dir, settings)
+    gm: GeneticManager = GeneticManager(app, track, settings)
     random.seed(seed)
     segment: TrajectorySegment = to.random_segment(settings.dna_length)
     gm.optimize(segment)
+    dir: Path = Path(__file__).parent.parent / "results" / f"conf_{i}" / f"seed_{seed}"
+    gm.save_stats(dir)
 
     original_trajectory: Trajectory = Trajectory(
         [TrajectoryPoint.from_snapshot(s) for s in segment.snapshots][:-1]

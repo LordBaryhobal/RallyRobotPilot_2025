@@ -24,7 +24,7 @@ from rallyrobopilot.trajectory_segment import TrajectorySegment
 
 class GeneticManager:
     def __init__(
-        self, app: Ursina, track: Track, out_path: Path, settings: GeneticSettings
+        self, app: Ursina, track: Track, settings: GeneticSettings
     ):
         self.app: Ursina = app
         self.track: Track = track
@@ -44,8 +44,6 @@ class GeneticManager:
         self.best_trajectory: Trajectory = Trajectory(color=rgb(50, 210, 50, 200))
         self.best_player: GeneticPlayer = GeneticPlayer(0, [])
         self.stats: list[GenerationStats] = []
-        self.out_path: Path = out_path
-        self.out_path.mkdir(parents=True, exist_ok=True)
 
     def new_car(self) -> Car:
         car = Car()
@@ -224,7 +222,6 @@ class GeneticManager:
         self.ref_trajectory.set_pts(self.segment.trajectory)
         self.init_pop_from_segment(self.segment)
         best: GeneticPlayer = self.execute()
-        self.save_stats()
         return best
 
     def init_pop_from_segment(self, segment: TrajectorySegment):
@@ -237,9 +234,11 @@ class GeneticManager:
         for i in range(self.settings.pop_size):
             self.population.append(GeneticPlayer(i, dna.copy()))
 
-    def save_stats(self):
-        df: pd.DataFrame = pd.DataFrame([asdict(gen) for gen in self.stats])
-        df.to_csv(self.out_path / "stats.csv", index=False)
+    def save_stats(self, out_path: Path):
+        out_path.mkdir(parents=True, exist_ok=True)
 
-        with open(self.out_path / "settings.json", "w") as f:
+        df: pd.DataFrame = pd.DataFrame([asdict(gen) for gen in self.stats])
+        df.to_csv(out_path / "stats.csv", index=False)
+
+        with open(out_path / "settings.json", "w") as f:
             json.dump(asdict(self.settings), f, indent=4)

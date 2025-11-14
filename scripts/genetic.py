@@ -22,12 +22,14 @@ def main(settings: GeneticSettings, record_path: str, seed: Optional[int]):
 
     to: TrajectoryOptimizer = TrajectoryOptimizer(record_path)
     gm: GeneticManager = GeneticManager(
-        app, track, Path(__file__).parent.parent / "results" / "0", settings
+        app, track, settings
     )
     if seed is not None:
         random.seed(seed)
     segment: TrajectorySegment = to.random_segment(settings.dna_length)
     gm.optimize(segment)
+    dir: Path = Path(__file__).parent.parent / "results" / "0"
+    gm.save_stats(dir)
     quit()
 
 
