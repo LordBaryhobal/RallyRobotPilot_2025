@@ -12,25 +12,74 @@ import torch.optim as optim
 import tqdm
 from PyQt6 import QtWidgets
 from sklearn.model_selection import train_test_split
+from torch.utils.data import random_split,DataLoader
 
 from rallyrobopilot.game_launcher import prepare_game_app
 from rallyrobopilot.recorder import Recorder
 from rallyrobopilot.sensing_message import SensingSnapshot
+
+if torch.cuda.is_available():
+    device = torch.device("cuda")
+    print(f"GPU: {torch.cuda.get_device_name(0)} is available. Using GPU.")
+else:
+    device = torch.device("cpu")
+    print("No GPU available. Using CPU.")
+
+NUMBER_LAST_IMAGES = 3
+INPUT_WIDTH = 256
+INPUT_HEIGHT = 256
+
+class DriverDataset(torch.utils.data.Dataset):
+    def __init__(self,folder):
+        self.X = []
+        self.Y = []
+        for filename in os.listdir(folder):
+            if not filename.endswith(".npz"):
+                continue
+            filepath = os.path.join(folder, filename)
+
+            with lzma.open(filepath, "rb") as file:
+                data = pickle.load(file)
+                for i, frame in enumerate(data):
+                    last_images = []
+                    for i1 in range(i - NUMBER_LAST_IMAGES, i):
+                        if i1 >= 0:
+                            last_images.append(data[i1].image)
+                        else:
+                            last_images.append(data[i].image)
+                    all_images_stacked = np.stack(last_images + [frame.image], axis=0)
+                    frame_tensor = torch.from_numpy(all_images_stacked).float() / 255.0
+                    self.X.append(frame_tensor)
+                    self.Y.append(frame.current_controls)
+                print("computed file",filename)
+        
+        self.X = torch.stack(self.X).to(device)
+        self.Y = torch.Tensor(np.array(self.Y)).float().to(device)
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self,idx):
+        return self.X[idx],self.Y[idx]
+
+
+
 
 
 class VisualRacer:
     def __init__(self):
         self.always_forward = True
         self.conv_layers = nn.Sequential(
-            nn.Conv2d(3, 24, 3, stride=2),
+            nn.Conv2d((NUMBER_LAST_IMAGES+1)*3, 24, 3, stride=2),
             nn.ELU(),
             nn.Conv2d(24, 48, 3, stride=2),
             nn.MaxPool2d(4, stride=4),
             nn.Dropout(p=0.25)
-        )
+        ).to(device)
+        self.last_images = []
         
         with torch.no_grad():
-            dummy = torch.zeros(1, 3, 400, 600)
+            dummy = torch.zeros(1,(NUMBER_LAST_IMAGES+1)*3, INPUT_WIDTH, INPUT_HEIGHT).to(device)
             conv_out = self.conv_layers(dummy)
             conv_out_flat = conv_out.view(1, -1)
             conv_output_size = conv_out_flat.size(1)
@@ -40,47 +89,32 @@ class VisualRacer:
             nn.ELU(),
             nn.Linear(in_features=50, out_features=10),
             nn.Linear(in_features=10, out_features=4),
-        )
-        self.loss = nn.BCEWithLogitsLoss()
+        ).to(device)
+        self.loss = nn.BCEWithLogitsLoss().to(device)
         self.optimizer = optim.AdamW(list(self.conv_layers.parameters()) + list(self.linear_layers.parameters()), lr=0.001)
         
 
 
-    def forward(self, input: torch.Tensor):
-        input = input.view(input.size(0), 3, 400, 600)
+    def forward(self, input: torch.cuda.FloatTensor):
+        input = input.view(input.size(0), (NUMBER_LAST_IMAGES+1)*3, INPUT_WIDTH, INPUT_HEIGHT).to(device)
         output = self.conv_layers(input)
         output = output.view(output.size(0), -1)
         output = self.linear_layers(output)
         return output
     
     def train(self):
-        folder = "data_images"
-        X = []
-        y = []
-        for filename in os.listdir(folder):
-            if not filename.endswith(".npz"):
-                continue
-            with lzma.open(os.path.join(folder, filename), "rb") as file:
-                data = pickle.load(file)
-                for i,frame in enumerate(data):
-                    print(i)
-                    last_images = []
-                    for i1 in range(i-5,i):
-                        if i1 >= 0:
-                            last_images.append(data[i1].image)
-                        else:
-                            last_images.append(data[i].image)
-                
-                    X.append({"image": frame.image,"last_images":last_images})
-                    y.append(frame.current_controls)
-        print(X)
-        X = torch.tensor(np.array(X)).float() / 255.0
-        print(X)
-        y = torch.tensor(np.array(y)).float()
-        X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=0.8)
-        
+        print("starting train")
+        folder = "data_images_reduced"
+        full_dataset = DriverDataset(folder)
+    
+        train_size = int(0.8 * len(full_dataset))
+        test_size = len(full_dataset) - train_size
+        train_dataset, test_dataset = random_split(full_dataset, [train_size, test_size])
         n_epochs = 80
         batch_size = 10
+
+        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True) 
+        test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
         train_loss = []
         test_loss = []
@@ -88,10 +122,12 @@ class VisualRacer:
         print("Training")
         for epoch in tqdm.tqdm(range(n_epochs)):
             batch_loss = []
-            for i in range(0, len(X_train), batch_size):
-                X_batch = X_train[i:i+batch_size]
+            self.linear_layers.train()
+            self.conv_layers.train()
+            for X_batch, y_batch in train_dataloader:
+                X_batch = X_batch.to(device)
+                y_batch = y_batch.to(device)
                 y_pred = self.forward(X_batch)
-                y_batch = y_train[i:i+batch_size]
                 loss = self.loss(y_pred, y_batch)
                 batch_loss.append(loss.item())
                 self.optimizer.zero_grad()
@@ -100,23 +136,44 @@ class VisualRacer:
             
             mean_batch_loss = np.array(batch_loss).mean()
             train_loss.append(mean_batch_loss)
+            self.conv_layers.eval()
+            self.linear_layers.eval()
+            test_batch_loss = []
             with torch.no_grad():
-                y_pred = self.forward(X_test)
-                test_loss.append(self.loss(y_pred, y_test).item())
+                for X_test_batch, y_test_batch in test_dataloader:
+                    X_test_batch = X_test_batch.to(device)
+                    y_test_batch = y_test_batch.to(device)
+                    
+                    y_pred_test = self.forward(X_test_batch)
+                    test_batch_loss.append(self.loss(y_pred_test, y_test_batch).item())
+
+                mean_test_loss = np.array(test_batch_loss).mean()
+                test_loss.append(mean_test_loss)
             print(f"Finished epoch {epoch}, latest loss {mean_batch_loss}")
         
         epochs = list(range(n_epochs))
+        plt.gca().clear()
         plt.plot(epochs, train_loss, label="Train")
         plt.plot(epochs, test_loss, label="Test")
         plt.savefig("learning.png")
 
-        # compute accuracy (no_grad is optional)
+        
+        total_correct = 0
+        total_samples = 0
         with torch.no_grad():
-            y_pred = self.forward(X_test)
-        accuracy = (y_pred.round() == y_test).float().mean()
-        print(f"Accuracy {accuracy}")
+            for X_test_batch, y_test_batch in test_dataloader:
+                X_test_batch = X_test_batch.to(device)
+                y_test_batch = y_test_batch.to(device)
+                
+                y_pred_test = self.forward(X_test_batch)
+                correct = (y_pred_test.round() == y_test_batch).float().sum()
+                total_correct += correct
+                total_samples += y_test_batch.numel()
 
-        self.save_model("models/model.pt")
+        accuracy = total_correct / total_samples
+        print(f"Accuracy {accuracy:.4f}")
+
+        self.save_model("models/visual_model8.pt")
 
     def save_model(self, path: str):
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -134,7 +191,9 @@ class VisualRacer:
             self.optimizer.load_state_dict(checkpoint["optimizer_state"])
     
     def nn_infer(self, message):
+        # pass the last x images with the current image
         #   Do smart NN inference here
+
         image = torch.Tensor(message.image.reshape(1, -1) / 255)
         output = self.forward(image)
         command_list = ["forward", "back", "left", "right"]
