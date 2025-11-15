@@ -4,10 +4,10 @@ import torch.optim as optim
 import lzma
 import os
 import pickle
-from threading import Thread
-from data_images.image_scaler import rescale
 from ursina import Entity
 
+from threading import Thread
+from data_images.image_scaler import rescale
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -27,7 +27,7 @@ else:
     device = torch.device("cpu")
     print("No GPU available. Using CPU.")
 
-NUMBER_LAST_IMAGES = 3
+NUMBER_LAST_IMAGES = 5
 INPUT_WIDTH = 128
 INPUT_HEIGHT = 128
 
@@ -55,17 +55,19 @@ class DriverDataset(torch.utils.data.Dataset):
                     X.append(frame_tensor)
                     self.Y.append(frame.current_controls)
                     # Data augmentation (add flipped last 5 images )
-                    if self.random_data_flip and i % 10 == 0:
+                    if self.random_data_flip and i % 3 == 0:
                         for i in range(len(last_images)):
-                            last_images[i] = np.flipud(last_images[i])
-                        all_images_stacked = np.stack(last_images + [np.flipud(frame.image)], axis=0)
+                            last_images[i] = np.flip(last_images[i],axis=1)
+                        all_images_stacked = np.stack(last_images + [np.flip(frame.image,axis=1)], axis=0)
                         frame_tensor_flipped = torch.from_numpy(all_images_stacked).float() / 255.0
                         X.append(frame_tensor)
-                        self.Y.append(frame.current_controls)
+                        ctrl = frame.current_controls
+                        flipped_controls =[ctrl[0], ctrl[1], ctrl[3], ctrl[2]]
+                        self.Y.append(flipped_controls)
                 print("computed file",filename)
         
-        self.X = torch.stack(X).to(device)
-        self.Y = torch.Tensor(np.array(self.Y)).float().to(device)
+        self.X = torch.stack(X)
+        self.Y = torch.Tensor(np.array(self.Y)).float()
 
     def __len__(self):
         return len(self.X)
@@ -84,10 +86,14 @@ class VisualRacer(Entity):
         self.auto_pilot = False
         self.car = None
         self.conv_layers = nn.Sequential(
-            nn.Conv2d((NUMBER_LAST_IMAGES+1)*3, 24, 3, stride=2),
+            nn.Conv2d((NUMBER_LAST_IMAGES+1)*3, 32, 3, stride=2, padding=1),
             nn.ELU(),
-            nn.Conv2d(24, 48, 3, stride=2),
-            nn.MaxPool2d(4, stride=4),
+            nn.Conv2d(32, 64, 3, stride=2, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ELU(),
+            nn.Conv2d(64, 128, 3, stride=2, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ELU(),
             nn.Dropout(p=0.25)
         ).to(device)
         self.last_images = []
@@ -105,7 +111,7 @@ class VisualRacer(Entity):
             nn.Linear(in_features=10, out_features=4),
         ).to(device)
         self.loss = nn.BCEWithLogitsLoss().to(device)
-        self.optimizer = optim.AdamW(list(self.conv_layers.parameters()) + list(self.linear_layers.parameters()), lr=0.001)
+        self.optimizer = optim.AdamW(list(self.conv_layers.parameters()) + list(self.linear_layers.parameters()), lr=0.005)
         
 
 
@@ -119,16 +125,30 @@ class VisualRacer(Entity):
     def train(self):
         print("starting train")
         folder = "data_images_reduced"
-        full_dataset = DriverDataset(folder,True)
+        full_dataset = DriverDataset(folder,False)
     
         train_size = int(0.8 * len(full_dataset))
         test_size = len(full_dataset) - train_size
         train_dataset, test_dataset = random_split(full_dataset, [train_size, test_size])
-        n_epochs = 80
+        n_epochs = 45
         batch_size = 8
 
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True) 
         test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+        Y_tensor = full_dataset.Y.detach().cpu()
+        with torch.no_grad():
+            positives = Y_tensor.sum(dim=0)
+
+            total = len(Y_tensor)
+            negatives = total - positives
+
+            pos_weight = (negatives / (positives + 1e-6))
+            pos_weight
+
+        print("pos_weight",pos_weight)
+        
+        self.loss = nn.BCEWithLogitsLoss(pos_weight=pos_weight).to(device)
 
         train_loss = []
         test_loss = []
@@ -141,10 +161,10 @@ class VisualRacer(Entity):
             for X_batch, y_batch in train_dataloader:
                 X_batch = X_batch.to(device)
                 y_batch = y_batch.to(device)
+                self.optimizer.zero_grad()
                 y_pred = self.forward(X_batch)
                 loss = self.loss(y_pred, y_batch)
                 batch_loss.append(loss.item())
-                self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
             
@@ -159,10 +179,12 @@ class VisualRacer(Entity):
                     y_test_batch = y_test_batch.to(device)
                     
                     y_pred_test = self.forward(X_test_batch)
+                    #print(y_pred_test.mean(),y_pred_test.min(),y_pred_test.max())
                     test_batch_loss.append(self.loss(y_pred_test, y_test_batch).item())
 
                 mean_test_loss = np.array(test_batch_loss).mean()
                 test_loss.append(mean_test_loss)
+
             print(f"Finished epoch {epoch}, latest loss {mean_batch_loss}")
         
         epochs = list(range(n_epochs))
