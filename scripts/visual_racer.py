@@ -32,7 +32,8 @@ INPUT_WIDTH = 128
 INPUT_HEIGHT = 128
 
 class DriverDataset(torch.utils.data.Dataset):
-    def __init__(self,folder):
+    def __init__(self,folder,rdf=True):
+        self.random_data_flip = rdf
         X = []
         self.Y = []
         for filename in os.listdir(folder):
@@ -53,6 +54,14 @@ class DriverDataset(torch.utils.data.Dataset):
                     frame_tensor = torch.from_numpy(all_images_stacked).float() / 255.0
                     X.append(frame_tensor)
                     self.Y.append(frame.current_controls)
+                    # Data augmentation (add flipped last 5 images )
+                    if self.random_data_flip and i % 10 == 0:
+                        for i in range(len(last_images)):
+                            last_images[i] = np.flipud(last_images[i])
+                        all_images_stacked = np.stack(last_images + [np.flipud(frame.image)], axis=0)
+                        frame_tensor_flipped = torch.from_numpy(all_images_stacked).float() / 255.0
+                        X.append(frame_tensor)
+                        self.Y.append(frame.current_controls)
                 print("computed file",filename)
         
         self.X = torch.stack(X).to(device)
@@ -110,7 +119,7 @@ class VisualRacer(Entity):
     def train(self):
         print("starting train")
         folder = "data_images_reduced"
-        full_dataset = DriverDataset(folder)
+        full_dataset = DriverDataset(folder,True)
     
         train_size = int(0.8 * len(full_dataset))
         test_size = len(full_dataset) - train_size
