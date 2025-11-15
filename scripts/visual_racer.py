@@ -3,7 +3,6 @@ import os
 import pickle
 from threading import Thread
 
-from flask import Flask
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -26,12 +25,12 @@ else:
     print("No GPU available. Using CPU.")
 
 NUMBER_LAST_IMAGES = 3
-INPUT_WIDTH = 256
-INPUT_HEIGHT = 256
+INPUT_WIDTH = 128
+INPUT_HEIGHT = 128
 
 class DriverDataset(torch.utils.data.Dataset):
     def __init__(self,folder):
-        self.X = []
+        X = []
         self.Y = []
         for filename in os.listdir(folder):
             if not filename.endswith(".npz"):
@@ -49,11 +48,11 @@ class DriverDataset(torch.utils.data.Dataset):
                             last_images.append(data[i].image)
                     all_images_stacked = np.stack(last_images + [frame.image], axis=0)
                     frame_tensor = torch.from_numpy(all_images_stacked).float() / 255.0
-                    self.X.append(frame_tensor)
+                    X.append(frame_tensor)
                     self.Y.append(frame.current_controls)
                 print("computed file",filename)
         
-        self.X = torch.stack(self.X).to(device)
+        self.X = torch.stack(X).to(device)
         self.Y = torch.Tensor(np.array(self.Y)).float().to(device)
 
     def __len__(self):
@@ -111,7 +110,7 @@ class VisualRacer:
         test_size = len(full_dataset) - train_size
         train_dataset, test_dataset = random_split(full_dataset, [train_size, test_size])
         n_epochs = 80
-        batch_size = 10
+        batch_size = 8
 
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True) 
         test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
@@ -152,10 +151,10 @@ class VisualRacer:
             print(f"Finished epoch {epoch}, latest loss {mean_batch_loss}")
         
         epochs = list(range(n_epochs))
-        plt.gca().clear()
-        plt.plot(epochs, train_loss, label="Train")
-        plt.plot(epochs, test_loss, label="Test")
-        plt.savefig("learning.png")
+        #plt.gca().clear()
+        #plt.plot(epochs, train_loss, label="Train")
+        #plt.plot(epochs, test_loss, label="Test")
+        #plt.savefig("learning.png")
 
         
         total_correct = 0
@@ -193,12 +192,18 @@ class VisualRacer:
     def nn_infer(self, message):
         # pass the last x images with the current image
         #   Do smart NN inference here
-
-        image = torch.Tensor(message.image.reshape(1, -1) / 255)
+        if len(self.last_images)==0 :
+            while len(self.last_images) != NUMBER_LAST_IMAGES:
+                self.last_images.append(message.image)
+        
+        all_images_stacked = np.stack(self.last_images + [message.image], axis=0)
+        frame_tensor = torch.from_numpy(all_images_stacked).float() / 255.0
         output = self.forward(image)
         command_list = ["forward", "back", "left", "right"]
         threshold = 0.5
         commands = [(command_list[i], output[0][i] > threshold) for i in range(4)]
+        self.last_images.append(image)
+        self.last_images.pop()
         return commands
 
 
@@ -223,11 +228,7 @@ if  __name__ == "__main__":
         app = QtWidgets.QApplication(sys.argv)
 
         nn_brain = VisualRacer()
-        nn_brain.load_model("models/model.pt")
-        flask_app = Flask(__name__)
-        flask_thread = Thread(target=flask_app.run, kwargs={'host': "0.0.0.0", 'port': 5000})
-        print("Flask server running on port 5000")
-        flask_thread.start()
+        nn_brain.load_model("models/visual_model8.pt")
 
         app, car, track = prepare_game_app("SimpleTrack/track_metadata.json", True)
         recorder: Recorder = Recorder(car)
