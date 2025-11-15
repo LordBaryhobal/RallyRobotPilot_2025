@@ -1,13 +1,16 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
 import lzma
 import os
 import pickle
 from threading import Thread
+from data_images.image_scaler import rescale
+from ursina import Entity
 
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
-import torch.nn as nn
-import torch.optim as optim
+
 import tqdm
 from PyQt6 import QtWidgets
 from sklearn.model_selection import train_test_split
@@ -65,9 +68,12 @@ class DriverDataset(torch.utils.data.Dataset):
 
 
 
-class VisualRacer:
+class VisualRacer(Entity):
     def __init__(self):
+        super().__init__()
         self.always_forward = True
+        self.auto_pilot = False
+        self.car = None
         self.conv_layers = nn.Sequential(
             nn.Conv2d((NUMBER_LAST_IMAGES+1)*3, 24, 3, stride=2),
             nn.ELU(),
@@ -174,6 +180,24 @@ class VisualRacer:
 
         self.save_model("models/visual_model8.pt")
 
+
+    def update(self):
+        if self.auto_pilot:
+            message: SensingSnapshot = SensingSnapshot().from_car(self.car)
+            output =  self.nn_infer(message)
+            self.car.keys["w"] = output[0]
+            self.car.keys["s"] = output[1]
+            self.car.keys["a"] = output[2]
+            self.car.keys["d"] = output[3]
+
+    def input(self, key):
+        if key == "u":
+            self.auto_pilot = not self.auto_pilot
+            if self.auto_pilot:
+                print("Auto-pilot enabled")
+            else:
+                print("Auto-pilot disabled")
+
     def save_model(self, path: str):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         torch.save({
@@ -194,30 +218,26 @@ class VisualRacer:
         #   Do smart NN inference here
         if len(self.last_images)==0 :
             while len(self.last_images) != NUMBER_LAST_IMAGES:
-                self.last_images.append(message.image)
+                self.last_images.append(rescale(message.image))
         
-        all_images_stacked = np.stack(self.last_images + [message.image], axis=0)
+        all_images_stacked = np.stack(self.last_images + [rescale(message.image)], axis=0)
         frame_tensor = torch.from_numpy(all_images_stacked).float() / 255.0
-        output = self.forward(image)
-        command_list = ["forward", "back", "left", "right"]
+        frame_tensor = frame_tensor.unsqueeze(0) 
+
+        print(".:.",frame_tensor.shape)
+        output = self.forward(frame_tensor)
         threshold = 0.5
-        commands = [(command_list[i], output[0][i] > threshold) for i in range(4)]
-        self.last_images.append(image)
-        self.last_images.pop()
+        commands = [(output[0][i].item() > threshold) for i in range(4)]
+        self.last_images.append(rescale(message.image))
+        self.last_images.pop(0)
         return commands
 
-
-    def process_message(self, message: SensingSnapshot, data_collector):
-        commands = self.nn_infer(message)
-        for command, start in commands:
-            data_collector.onCarControlled(command, start)
 
 if  __name__ == "__main__":
     import sys
     train = len(sys.argv) > 1 and sys.argv[1] == "train"
-
+    racer = VisualRacer()
     if train:
-        racer = VisualRacer()
         racer.train()
     else:
         
@@ -227,10 +247,8 @@ if  __name__ == "__main__":
 
         app = QtWidgets.QApplication(sys.argv)
 
-        nn_brain = VisualRacer()
-        nn_brain.load_model("models/visual_model8.pt")
+        racer.load_model("models/visual_model8.pt")
 
         app, car, track = prepare_game_app("SimpleTrack/track_metadata.json", True)
-        recorder: Recorder = Recorder(car)
-        recorder.enable()
+        racer.car = car
         app.run()

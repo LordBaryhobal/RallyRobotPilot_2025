@@ -217,7 +217,7 @@ class SuperRacer(Entity):
     def update(self):
         if self.auto_pilot:
             message: SensingSnapshot = SensingSnapshot().from_car(self.car)
-            output =  racer.nn_infer(message)
+            output =  self.nn_infer(message)
             self.car.keys["w"] = output[0]
             self.car.keys["s"] = output[1]
             self.car.keys["a"] = output[2]

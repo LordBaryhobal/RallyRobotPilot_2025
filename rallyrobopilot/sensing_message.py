@@ -1,7 +1,7 @@
 import imageio
 import socket
 import struct
-
+from ursina import *
 import numpy as np
 
 from rallyrobopilot.car import Car
@@ -34,6 +34,11 @@ class SensingSnapshot:
         self.current_controls = (int(car.keys["w"]), int(car.keys["s"]),
                                  int(car.keys["a"]), int(car.keys["d"]))
         self.raycast_distances = car.multiray_sensor.collect_sensor_values()
+        tex = base.win.getDisplayRegion(0).getScreenshot()
+        arr = tex.getRamImageAs("RGB")
+        data = np.frombuffer(arr, np.uint8)
+        self.image = data.reshape(tex.getYSize(), tex.getXSize(), 3)
+        self.image = self.image[::-1, :, :]
         return self
 
     def pack(self):
