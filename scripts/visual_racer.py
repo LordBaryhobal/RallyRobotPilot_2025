@@ -100,9 +100,6 @@ class VisualRacer(Entity):
             nn.Conv2d(64, 128, 3, stride=2, padding=1),
             nn.BatchNorm2d(128),
             nn.ELU(),
-            nn.Conv2d(128, 32, 3, stride=2, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ELU(),
             nn.Dropout(p=0.25)
         ).to(device)
         self.last_images = []
