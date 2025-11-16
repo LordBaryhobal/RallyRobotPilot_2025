@@ -227,7 +227,7 @@ class VisualRacer(Entity):
         if self.auto_pilot:
             message: SensingSnapshot = SensingSnapshot().from_car(self.car)
             output =  self.nn_infer(message)
-            self.car.keys["w"] = output[load_model0]
+            self.car.keys["w"] = output[0]
             self.car.keys["s"] = output[1]
             self.car.keys["a"] = output[2]
             self.car.keys["d"] = output[3]
@@ -289,7 +289,7 @@ if  __name__ == "__main__":
 
         app = QtWidgets.QApplication(sys.argv)
 
-        racer.load_model("models/visual_model8.pt")
+        racer.load_model("models/visual_model8-last-try.pt")
 
         app, car, track = prepare_game_app("SimpleTrack/track_metadata.json", True)
         racer.car = car
