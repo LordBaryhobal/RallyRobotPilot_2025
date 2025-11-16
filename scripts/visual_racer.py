@@ -5,11 +5,14 @@ import lzma
 import os
 import pickle
 from ursina import Entity
-
+from torchvision import transforms
 from threading import Thread
 from data_images.image_scaler import rescale
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from torchvision.transforms import GaussianBlur
 
 import tqdm
 from PyQt6 import QtWidgets
@@ -32,8 +35,9 @@ INPUT_WIDTH = 128
 INPUT_HEIGHT = 128
 
 class DriverDataset(torch.utils.data.Dataset):
-    def __init__(self,folder,rdf=True):
+    def __init__(self,folder,rdf=True,dg=True):
         self.random_data_flip = rdf
+        self.data_augmented = dg
         X = []
         self.Y = []
         for filename in os.listdir(folder):
@@ -55,15 +59,17 @@ class DriverDataset(torch.utils.data.Dataset):
                     X.append(frame_tensor)
                     self.Y.append(frame.current_controls)
                     # Data augmentation (add flipped last 5 images )
-                    if self.random_data_flip and i % 3 == 0:
+                    if self.random_data_flip:
                         for i in range(len(last_images)):
                             last_images[i] = np.flip(last_images[i],axis=1)
                         all_images_stacked = np.stack(last_images + [np.flip(frame.image,axis=1)], axis=0)
                         frame_tensor_flipped = torch.from_numpy(all_images_stacked).float() / 255.0
-                        X.append(frame_tensor)
+                        X.append(frame_tensor_flipped)
                         ctrl = frame.current_controls
                         flipped_controls =[ctrl[0], ctrl[1], ctrl[3], ctrl[2]]
                         self.Y.append(flipped_controls)
+
+
                 print("computed file",filename)
         
         self.X = torch.stack(X)
@@ -94,6 +100,9 @@ class VisualRacer(Entity):
             nn.Conv2d(64, 128, 3, stride=2, padding=1),
             nn.BatchNorm2d(128),
             nn.ELU(),
+            nn.Conv2d(128, 32, 3, stride=2, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ELU(),
             nn.Dropout(p=0.25)
         ).to(device)
         self.last_images = []
@@ -111,7 +120,7 @@ class VisualRacer(Entity):
             nn.Linear(in_features=10, out_features=4),
         ).to(device)
         self.loss = nn.BCEWithLogitsLoss().to(device)
-        self.optimizer = optim.AdamW(list(self.conv_layers.parameters()) + list(self.linear_layers.parameters()), lr=0.005)
+        self.optimizer = optim.AdamW(list(self.conv_layers.parameters()) + list(self.linear_layers.parameters()), lr=0.0005)
         
 
 
@@ -124,19 +133,20 @@ class VisualRacer(Entity):
     
     def train(self):
         print("starting train")
-        folder = "data_images_reduced"
-        full_dataset = DriverDataset(folder,False)
+        folder = "data_images_reduced_small"
+        full_dataset = DriverDataset(folder,True)
     
         train_size = int(0.8 * len(full_dataset))
         test_size = len(full_dataset) - train_size
         train_dataset, test_dataset = random_split(full_dataset, [train_size, test_size])
-        n_epochs = 45
-        batch_size = 8
+        n_epochs = 20
+        batch_size = 5
 
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True) 
         test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
         Y_tensor = full_dataset.Y.detach().cpu()
+        
         with torch.no_grad():
             positives = Y_tensor.sum(dim=0)
 
@@ -144,9 +154,9 @@ class VisualRacer(Entity):
             negatives = total - positives
 
             pos_weight = (negatives / (positives + 1e-6))
-            pos_weight
 
-        print("pos_weight",pos_weight)
+            
+        
         
         self.loss = nn.BCEWithLogitsLoss(pos_weight=pos_weight).to(device)
 
@@ -183,15 +193,16 @@ class VisualRacer(Entity):
                     test_batch_loss.append(self.loss(y_pred_test, y_test_batch).item())
 
                 mean_test_loss = np.array(test_batch_loss).mean()
+                print("mean test loss",mean_batch_loss)
                 test_loss.append(mean_test_loss)
 
             print(f"Finished epoch {epoch}, latest loss {mean_batch_loss}")
         
-        epochs = list(range(n_epochs))
-        #plt.gca().clear()
-        #plt.plot(epochs, train_loss, label="Train")
-        #plt.plot(epochs, test_loss, label="Test")
-        #plt.savefig("learning.png")
+            epochs = list(range(epoch+1))
+            plt.gca().clear()
+            plt.plot(epochs, train_loss, label="Train")
+            plt.plot(epochs, test_loss, label="Test")
+            plt.savefig("learning.png")
 
         
         total_correct = 0
@@ -216,7 +227,7 @@ class VisualRacer(Entity):
         if self.auto_pilot:
             message: SensingSnapshot = SensingSnapshot().from_car(self.car)
             output =  self.nn_infer(message)
-            self.car.keys["w"] = output[0]
+            self.car.keys["w"] = output[load_model0]
             self.car.keys["s"] = output[1]
             self.car.keys["a"] = output[2]
             self.car.keys["d"] = output[3]

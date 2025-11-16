@@ -6,12 +6,7 @@ import pickle
 from pathlib import Path
 import tqdm
 
-in_folder = Path("data_images")
-out_folder = Path("data_images_rescaled")
-
-out_folder.mkdir(exist_ok=True, parents=True)
-
-SIZE = 256
+SIZE = 128
 
 def rescale(img: np.ndarray):
     size: int = min(img.shape[0], img.shape[1])
@@ -22,15 +17,23 @@ def rescale(img: np.ndarray):
     return np.array(image.resize((SIZE, SIZE)))
 
 
-for filename in tqdm.tqdm(os.listdir(in_folder)):
-    if not filename.endswith(".npz"):
-        continue
-    
-    inpath = in_folder / filename
-    outpath = out_folder / filename
 
-    with lzma.open(inpath, "rb") as file, lzma.open(outpath, "wb") as out:
-        data = pickle.load(file)
-        for i, frame in tqdm.tqdm(enumerate(data), unit="frame"):
-            frame.image = rescale(frame.image)
-        pickle.dump(data, out)
+if __name__ == "__main__":
+    in_folder = Path("temp_data")
+    out_folder = Path("data_images_rescaled")
+
+    out_folder.mkdir(exist_ok=True, parents=True)
+
+
+    for filename in tqdm.tqdm(os.listdir(in_folder)):
+        if not filename.endswith(".npz"):
+            continue
+        
+        inpath = in_folder / filename
+        outpath = out_folder / filename
+
+        with lzma.open(inpath, "rb") as file, lzma.open(outpath, "wb") as out:
+            data = pickle.load(file)
+            for i, frame in tqdm.tqdm(enumerate(data), unit="frame"):
+                frame.image = rescale(frame.image)
+            pickle.dump(data, out)
