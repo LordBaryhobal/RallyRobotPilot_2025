@@ -27,6 +27,9 @@ class TrajectoryOptimizer:
 
     def random_segment(self, length: int = 100) -> TrajectorySegment:
         start_i: int = random.randint(0, len(self.snapshots) - length)
+        return self.segment_at(start_i, length)
+    
+    def segment_at(self, start_i: int, length: int) -> TrajectorySegment:
         end_i: int = start_i + length
         snapshots: list[SensingSnapshot] = self.snapshots[start_i:end_i]
         start: SensingSnapshot = snapshots[0]
